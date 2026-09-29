@@ -310,7 +310,8 @@ class Alerter:
         if a.verdict.label in self.desktop_kinds:
             title, body = a.desktop()
             desk = (title, body, click_link(a.verdict.label, self.buy_template, a.chain, a.address, a.dex_url))
-        sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a), desk)
+        buttons = ([("🛒 Open to buy", a.buy_url)] if a.buy_url else []) + ([("📈 Chart", a.dex_url)] if a.dex_url else [])
+        sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a), desk, buttons)
         if not sent:
             return False  # not recorded, so the next pass retries
         self.db.record_alert(a.chain, a.address, "verdict", a.verdict.label, sent,
@@ -324,7 +325,9 @@ class Alerter:
         if "EXIT" in self.desktop_kinds:
             desk = (f"⚠️ EXIT WARNING {title}", "; ".join(d for _, d in flags)[:200] + ". Click to open the coin.",
                     click_link("EXIT", self.buy_template, chain, address, dex_url))
-        sent = await self._deliver(text, discord, tg, desk)
+        sell = buy_link(self.buy_template, chain, address)
+        buttons = ([("💸 Open to sell", sell)] if sell else []) + ([("📈 Chart", dex_url)] if dex_url else [])
+        sent = await self._deliver(text, discord, tg, desk, buttons)
         if sent:
             self.db.record_alert(chain, address, "exit_warning", None, sent, {"flags": [f for f, _ in flags]})
         return bool(sent)
@@ -335,7 +338,8 @@ class Alerter:
         self.db.record_alert("-", "-", "system", None, [], {"message": message})
 
     async def _deliver(self, text: str, discord_payload: dict, telegram_html: str,
-                       desktop: tuple[str, str, str | None] | None = None) -> list[str]:
+                       desktop: tuple[str, str, str | None] | None = None,
+                       buttons: list[tuple[str, str]] | None = None) -> list[str]:
         sent: list[str] = []
         if desktop and await self.desktop.send(*desktop):
             sent.append("desktop")
@@ -351,12 +355,17 @@ class Alerter:
                 log.error("Discord alert failed: %s", r.error)
         if self.use_telegram:
             url = f"https://api.telegram.org/bot{self.secrets.telegram_bot_token}/sendMessage"
-            r = await self.http.post_json(url, {
+            payload = {
                 "chat_id": self.secrets.telegram_chat_id,
                 "text": telegram_html,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True,
-            }, log_name="telegram-bot")
+            }
+            # Tap-able buttons on the phone (Telegram only accepts http/https button links).
+            row = [{"text": t, "url": u} for t, u in buttons or [] if u and u.startswith(("https://", "http://"))]
+            if row:
+                payload["reply_markup"] = {"inline_keyboard": [row]}
+            r = await self.http.post_json(url, payload, log_name="telegram-bot")
             if r.ok:
                 sent.append("telegram")
             else:

@@ -74,6 +74,13 @@ token page (use `{chain}` and `{address}` in the link). If that's empty, it open
 **DANGER / UNCHECKED alerts never open a buy page**, only the chart. Exit warnings open the coin so you
 can sell. You still press buy or sell yourself; the bot never trades.
 
+### Alerts on your phone too
+
+The bot runs on one computer. Alerts can go to your laptop (pop-ups) **and** your phone at the same time:
+set up the Telegram bot (or a Discord webhook) and install that app on your phone to get push notifications.
+Telegram alerts come with tap-able **🛒 Open to buy** and **📈 Chart** buttons. The buy button only appears on
+VERIFIED/UNCONFIRMED coins, and exit warnings get **💸 Open to sell**.
+
 Then list the accounts and wallets you care about. All of these files are optional:
 
 - `signals.yaml` – influential X accounts, **by numeric user ID**, with a tier (1 = mega public figures, 2 = top traders), a weight and optional known wallets. Also takes `force_include` / `force_block` lists.
@@ -94,7 +101,7 @@ python main.py leaderboard        # best and worst CA-posting X accounts
 python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py test-notify        # send a sample desktop pop-up
-python -m pytest                  # 163 tests
+python -m pytest                  # 164 tests
 ```
 
 ## How a coin is judged

@@ -87,3 +87,21 @@ def test_desktop_failure_never_raises():
             raise RuntimeError("no display")
 
     assert run(Broken(True).send("t", "b", None)) is False
+
+
+def test_telegram_gets_phone_buttons_but_danger_gets_no_buy_button():
+    import json as _json
+    sent = []
+
+    def handler(req):
+        sent.append(_json.loads(req.content))
+        return httpx.Response(200, json={"ok": True})
+
+    c = cfg(alerts={"buy_link": TPL, "desktop": False})
+    al = Alerter(http_with(handler), Secrets(telegram_bot_token="1:T", telegram_chat_id="9"), c, DB())
+    run(al.send_verdict(content("UNCONFIRMED")))
+    kb = sent[0]["reply_markup"]["inline_keyboard"][0]
+    assert [b["text"] for b in kb] == ["🛒 Open to buy", "📈 Chart"] and kb[0]["url"] == buy_link(TPL, "solana", CA)
+    al2 = Alerter(http_with(handler), Secrets(telegram_bot_token="1:T", telegram_chat_id="9"), c, DB())
+    run(al2.send_verdict(content("DANGER")))
+    assert [b["text"] for b in sent[1]["reply_markup"]["inline_keyboard"][0]] == ["📈 Chart"]
