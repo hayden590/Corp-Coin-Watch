@@ -79,7 +79,7 @@ python main.py health             # every source, each X account, requests this 
 python main.py leaderboard        # best and worst CA-posting X accounts
 python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
-python -m pytest                  # 156 tests
+python -m pytest                  # 157 tests
 ```
 
 ## How a coin is judged
