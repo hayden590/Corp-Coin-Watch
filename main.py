@@ -229,7 +229,7 @@ async def fomo_test(cfg: dict, secrets: Secrets) -> int:
     """Show what the FOMO API leaderboard returns, so the format can be checked/adapted."""
     import json as _json
 
-    from sources.fomo_source import find_handles, find_wallets
+    from sources.fomo_source import find_handles, find_wallets, parse_fomoapi_leaderboard
 
     if not secrets.fomo_api_key:
         print("Put FOMO_API_KEY in .env first (free key at fomoapi.io - sign in with an email code).")
@@ -244,7 +244,12 @@ async def fomo_test(cfg: dict, secrets: Secrets) -> int:
     print(f"Leaderboard: {'OK' if r.ok else 'FAILED'} (HTTP {r.status}) {r.error or ''}")
     if r.ok:
         print(f"Traders found: {find_handles(r.data)[:10]}")
-        print(f"Wallets in leaderboard: {len(find_wallets(r.data))}")
+        top = int(cfg["fomo"].get("max_traders", 15))
+        parsed = parse_fomoapi_leaderboard(r.data, top)
+        ws = parsed if parsed is not None else find_wallets(r.data)[:top]
+        print(f"Following the top {top} traders: {len(ws)} wallets")
+        for w in ws[:6]:
+            print(f"  {w['label']:<28} {w['chain']:<7} {w['wallet']}")
         print("First part of the reply (for Claude to check the format):")
         print(_json.dumps(r.data)[:800])
     return 0 if r.ok else 1

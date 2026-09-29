@@ -98,7 +98,8 @@ class Monitor:
                 self._fomo_alerted = True
                 await self.pipe.alerter.send_system(err)
         elif wallets:
-            self.pipe.wallets.sync(self.cfg, wallets)
+            removed = self.pipe.wallets.replace_fomo(self.cfg, wallets)
+            log.info("fomo: following %d leaderboard wallets (%d dropped)", len(wallets), removed)
             await self.pipe.source_ok("fomo")
         # theses for coins we recently alerted on
         if self.fomo.cfg.get("theses_url"):

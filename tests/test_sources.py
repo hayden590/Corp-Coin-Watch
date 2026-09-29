@@ -117,3 +117,38 @@ def test_x_source_keeps_tweets_fetched_before_outage():
     c["x"]["pace"] = 0
     src = XSource(Flaky(), DB(), c)
     assert [t.id for t in run(src.watch(["1", "2", "3"]))] == ["1"]
+
+
+FOMOAPI_REPLY = {"window": "7d", "source": "fomo-live", "count": 150, "traders": [
+    {"rank": 2, "handle": "Troupe KZ", "pnlUsd": 200000,
+     "wallets": {"solana": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU"}, "topTokens": []},
+    {"rank": 1, "handle": "0xAvast", "pnlUsd": 394198,
+     "wallets": {"solana": "8xLS57P4QLdTGRquHas8NP5EVjp2qUGbmSgrkh97mvmq",
+                 "evm": "0xcc0c581613dfd4ace7c8686668427236f8bd5cc5", "verified": True},
+     "topTokens": [{"imageUrl": "https://x/y.png", "tokenAddress": "98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump"}]},
+]}
+
+
+def test_fomoapi_leaderboard_format_uses_real_wallets_not_their_coins():
+    from sources.fomo_source import parse_fomoapi_leaderboard
+
+    ws = parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15)
+    assert [w["label"] for w in ws] == ["fomo #1 0xAvast", "fomo #1 0xAvast", "fomo #2 Troupe KZ"]
+    assert {w["chain"] for w in ws} == {"solana", "base"}
+    assert all("pump" not in w["wallet"] for w in ws)  # the coin in topTokens is NOT a wallet
+    assert len(parse_fomoapi_leaderboard(FOMOAPI_REPLY, 1)) == 2  # top 1 trader = their 2 wallets
+    assert all("pump" not in w["wallet"] for w in find_wallets(FOMOAPI_REPLY))  # generic scan fixed too
+
+
+def test_leaderboard_refresh_drops_traders_who_fell_off():
+    from wallets import Wallets
+
+    db = DB()
+    w = Wallets(db, http_with(lambda r: httpx.Response(404)), cfg(), "")
+    db.x("INSERT INTO wallets (wallet, chain, label, source) VALUES ('98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump', "
+         "'solana', 'junk', 'fomo')")
+    from sources.fomo_source import parse_fomoapi_leaderboard
+
+    removed = w.replace_fomo(cfg(), parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15))
+    rows = {r["wallet"] for r in db.q("SELECT wallet FROM wallets WHERE source = 'fomo'")}
+    assert removed == 1 and len(rows) == 3 and "98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump" not in rows

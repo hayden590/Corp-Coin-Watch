@@ -25,6 +25,7 @@ from net import Http
 log = logging.getLogger(__name__)
 
 WALLET_KEYS = ("wallet", "address", "solana", "evm", "pubkey", "publickey")
+NOT_WALLET_KEYS = ("token", "mint", "contract", "pair", "pool", "coin")
 THESIS_KEYS = ("thesis", "theses", "note", "comment", "text", "body", "content")
 NAME_KEYS = ("handle", "username", "name", "displayname")
 
@@ -41,6 +42,8 @@ def find_wallets(data: Any) -> list[dict]:
                     lbl = node[k]
                     break
             for k, v in node.items():
+                if any(n in k.lower() for n in NOT_WALLET_KEYS):
+                    continue  # e.g. a trader's "topTokens": those are coins, not wallets
                 if isinstance(v, str) and any(w in k.lower() for w in WALLET_KEYS):
                     addr = normalize(v)
                     fam = chain_family(v)
@@ -55,6 +58,24 @@ def find_wallets(data: Any) -> list[dict]:
 
     walk(data, None)
     return list(out.values())
+
+
+def parse_fomoapi_leaderboard(data: Any, top: int) -> list[dict] | None:
+    """FOMO API /v2/leaderboard: {"traders": [{"rank", "handle", "pnlUsd", "wallets": {"solana", "evm"}}]}.
+    Returns None if the reply isn't in that format."""
+    traders = data.get("traders") if isinstance(data, dict) else None
+    if not isinstance(traders, list):
+        return None
+    ranked = sorted((t for t in traders if isinstance(t, dict)), key=lambda t: t.get("rank") or 10**9)
+    out = []
+    for t in ranked[:top]:
+        handle = t.get("handle") or t.get("displayName") or "?"
+        w = t.get("wallets") if isinstance(t.get("wallets"), dict) else {}
+        for key, chain in (("solana", "solana"), ("evm", "base")):
+            addr = normalize(w.get(key) or "") if isinstance(w.get(key), str) else None
+            if addr and chain_family(addr) == ("solana" if chain == "solana" else "evm"):
+                out.append({"wallet": addr, "chain": chain, "label": f"fomo #{t.get('rank')} {handle}"})
+    return out
 
 
 def find_handles(data: Any) -> list[str]:
@@ -124,7 +145,9 @@ class FomoSource:
             self.mode = "fallback"
             return [], f"Fomo leaderboard unavailable ({r.error}); using fomo_wallets.yaml"
         top = int(self.cfg.get("max_traders", 15))
-        wallets = find_wallets(r.data)[:top]
+        wallets = parse_fomoapi_leaderboard(r.data, top)
+        if wallets is None:  # some other JSON format: generic scan
+            wallets = find_wallets(r.data)[:top]
         user_tmpl = self.cfg.get("user_url")
         if not wallets and user_tmpl:
             resolved = 0

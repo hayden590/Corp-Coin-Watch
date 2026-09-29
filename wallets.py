@@ -163,9 +163,23 @@ class Wallets:
             n += self.db.x(
                 """INSERT INTO wallets (wallet, chain, label, source, owner_user_id) VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT(wallet, chain) DO UPDATE SET label = COALESCE(excluded.label, wallets.label),
+                   source = CASE WHEN wallets.source = 'auto' THEN excluded.source ELSE wallets.source END,
                    owner_user_id = COALESCE(excluded.owner_user_id, wallets.owner_user_id)""",
                 (wallet, chain.lower(), label, source, owner))
         return n
+
+    def replace_fomo(self, cfg: dict, wallets: list[dict]) -> int:
+        """Leaderboard changed: drop fomo wallets no longer in the top list (keeps fomo_wallets.yaml
+        entries and all activity history), then add the current ones."""
+        keep = {(w["wallet"].lower() if w["wallet"].startswith("0x") else w["wallet"], w.get("chain", "solana"))
+                for w in (cfg.get("fomo_wallets") or []) + wallets if w.get("wallet")}
+        removed = 0
+        for r in self.db.q("SELECT wallet, chain FROM wallets WHERE source = 'fomo'"):
+            if (r["wallet"], r["chain"]) not in keep:
+                removed += self.db.x("DELETE FROM wallets WHERE wallet = ? AND chain = ? AND source = 'fomo'",
+                                     (r["wallet"], r["chain"]))
+        self.sync({"fomo_wallets": cfg.get("fomo_wallets") or []}, wallets)
+        return removed
 
     # --- fetching -------------------------------------------------------------
     async def fetch_activity(self, wallet: str, chain: str) -> list[dict] | None:

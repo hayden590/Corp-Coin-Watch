@@ -144,7 +144,7 @@ python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
 python main.py test-notify        # send a sample alert
-python -m pytest                  # 174 tests
+python -m pytest                  # 176 tests
 ```
 
 ## How a coin is judged
