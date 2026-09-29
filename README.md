@@ -101,9 +101,25 @@ droplet or a Vultr Regular instance. Pick **Ubuntu 24.04**, the cheapest size (1
 6. Watch the live log with `sudo journalctl -u corp-coin-watch -f`, check status with `sudo -u ccw .venv/bin/python main.py health`,
    and get the latest code with `sudo bash /opt/corp-coin-watch/deploy/update.sh`.
 
-A server has no screen, so desktop pop-ups are switched off there (`config.local.yaml`). Install
-**Telegram Desktop** on your laptop and **Telegram** on your phone, and each alert pops up on both, with the
-Open to buy / Chart buttons.
+A server has no screen, so its own desktop pop-ups are switched off (`config.local.yaml`). Alerts reach your
+laptop and phone like this instead.
+
+### Pop-ups on your laptop and phone from the server (ntfy)
+
+[ntfy](https://ntfy.sh) is a free push service. The server publishes each alert to your own private "topic", and
+anything subscribed to that topic shows it as a pop-up. Clicking the pop-up opens the coin: your buy page for
+VERIFIED/UNCONFIRMED coins, the chart for DANGER/UNCHECKED ones. Your phone doesn't need your laptop to be on.
+
+1. Make a private topic with `python main.py new-ntfy-topic`, then put `NTFY_TOPIC=...` in the server's `.env` and restart the bot.
+2. **Phone:** install the **ntfy** app, tap **+**, and enter your topic.
+3. **Laptop**, pick one:
+   - **No install:** open https://ntfy.sh/app, choose *Subscribe to topic*, enter your topic, and allow notifications.
+   - **Native pop-ups:** copy this repo to the laptop, run `pip install -r requirements.txt` (plus `brew install terminal-notifier` on a Mac),
+     then run `python laptop_notifier.py <your-topic>`. It shows alerts only while it's running.
+4. Test it with `python main.py test-notify` on the server.
+
+The topic name works like a password, because anyone who knows it can read your alerts. Keep it long and random, which is what
+`new-ntfy-topic` generates. Telegram and Discord alerts still work alongside ntfy if you want them too.
 
 Then list the accounts and wallets you care about. All of these files are optional:
 
@@ -124,8 +140,9 @@ python main.py health             # every source, each X account, requests this 
 python main.py leaderboard        # best and worst CA-posting X accounts
 python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
-python main.py test-notify        # send a sample desktop pop-up
-python -m pytest                  # 165 tests
+python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
+python main.py test-notify        # send a sample alert
+python -m pytest                  # 168 tests
 ```
 
 ## How a coin is judged

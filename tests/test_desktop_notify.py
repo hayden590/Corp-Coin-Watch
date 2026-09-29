@@ -105,3 +105,65 @@ def test_telegram_gets_phone_buttons_but_danger_gets_no_buy_button():
     al2 = Alerter(http_with(handler), Secrets(telegram_bot_token="1:T", telegram_chat_id="9"), c, DB())
     run(al2.send_verdict(content("DANGER")))
     assert [b["text"] for b in sent[1]["reply_markup"]["inline_keyboard"][0]] == ["📈 Chart"]
+
+
+# --- ntfy: server -> phone + laptop ----------------------------------------------
+
+def test_ntfy_payload_click_and_buttons():
+    from alerts import ntfy_payload
+
+    p = ntfy_payload("topic", "🟡 UNCONFIRMED GoodCat", "liq $85K", "https://buy", [("🛒 Open to buy", "https://buy"),
+                     ("📈 Chart", DEX), ("bad", "javascript:alert(1)")], "UNCONFIRMED")
+    assert p["click"] == "https://buy" and p["priority"] == 4 and p["tags"] == ["yellow_circle"]
+    assert [a["label"] for a in p["actions"]] == ["🛒 Open to buy", "📈 Chart"]
+    assert "click" not in ntfy_payload("t", "x", "y", "file:///etc", [], "DANGER")
+
+
+def test_alert_goes_to_ntfy_and_danger_has_no_buy_action():
+    import json as _json
+    posts = []
+
+    def handler(req):
+        posts.append(_json.loads(req.content))
+        return httpx.Response(200, json={"id": "1"})
+
+    c = cfg(alerts={"buy_link": TPL, "desktop": False})
+    sec = Secrets(ntfy_topic="ccw-test")
+    assert run(Alerter(http_with(handler), sec, c, DB()).send_verdict(content("UNCONFIRMED")))
+    run(Alerter(http_with(handler), sec, c, DB()).send_verdict(content("DANGER")))
+    safe, danger = posts
+    assert safe["topic"] == "ccw-test" and safe["click"] == buy_link(TPL, "solana", CA)
+    assert danger["click"] == DEX and all("buy" not in a["label"].lower() for a in danger.get("actions", []))
+
+
+def test_laptop_listener_turns_stream_into_popups():
+    from laptop_notifier import listen, to_popup
+
+    assert to_popup({"event": "keepalive"}) is None
+    assert to_popup({"event": "message", "title": "T", "message": "M", "click": "https://x"}) == ("T", "M", "https://x")
+    assert to_popup({"event": "message", "actions": [{"action": "view", "url": "https://y"}]})[2] == "https://y"
+    assert to_popup({"event": "message", "click": "file:///etc/passwd"})[2] is None
+
+    lines = "\n".join([
+        '{"id":"a","event":"open"}', '{"id":"b","event":"keepalive"}',
+        '{"id":"c","event":"message","title":"🟡 GoodCat","message":"liq","click":"https://buy"}'])
+    shown = []
+
+    class Rec(DesktopNotifier):
+        async def send(self, *a):
+            shown.append(a)
+            return True
+
+    import laptop_notifier
+    real = httpx.AsyncClient
+
+    class FakeClient(real):
+        def __init__(self, *a, **kw):
+            super().__init__(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=lines)))
+
+    laptop_notifier.httpx.AsyncClient = FakeClient
+    try:
+        run(listen("https://ntfy.example", "t", notifier=Rec(True), once=True))
+    finally:
+        laptop_notifier.httpx.AsyncClient = real
+    assert shown == [("🟡 GoodCat", "liq", "https://buy")]

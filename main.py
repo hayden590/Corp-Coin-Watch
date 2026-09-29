@@ -11,7 +11,8 @@ Usage:
   python main.py leaderboard        best and worst X accounts that post CAs
   python main.py backtest           replay strategies on recorded outcomes
   python main.py qualify            paper-trading report card ("NO EDGE FOUND" if it fails)
-  python main.py test-notify        send a sample desktop notification (click it to test the link)
+  python main.py new-ntfy-topic     make a private channel for phone + laptop pop-ups (ntfy)
+  python main.py test-notify        send a sample alert (click it to test the link)
   python main.py x-login            add X burner accounts from .env to twscrape
   python main.py telegram-login     log in to Telegram once (creates the local session)
 """
@@ -180,19 +181,50 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
     return 0
 
 
-async def test_notify(cfg: dict) -> int:
-    from desktop_notify import DesktopNotifier, click_link
+async def test_notify(cfg: dict, secrets: Secrets) -> int:
+    """Send one sample alert through ntfy (phone + laptop) and/or this computer's pop-ups."""
+    from alerts import Alerter
+    from desktop_notify import click_link
 
-    n = DesktopNotifier(True)
-    backend, status = n.backend()
-    print(f"Desktop notifications: {status}")
-    if not backend:
-        return 1
     sample = "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU"
-    url = click_link("UNCONFIRMED", cfg["alerts"].get("buy_link"), "solana", sample,
-                     f"https://dexscreener.com/solana/{sample}")
-    await n.send("🟡 UNCONFIRMED TEST ($TEST)", "This is a test from corp-coin-watch. Click to open the link.", url)
-    print(f"Sent. Clicking it should open: {url}")
+    dex = f"https://dexscreener.com/solana/{sample}"
+    url = click_link("UNCONFIRMED", cfg["alerts"].get("buy_link"), "solana", sample, dex)
+    title, body = "🟡 UNCONFIRMED TEST ($TEST)", "Test from corp-coin-watch. Click to open the link."
+    db = DB(":memory:")
+    http = make_http(cfg, None)
+    al = Alerter(http, secrets, cfg, db)
+    ok = False
+    try:
+        if al.use_ntfy:
+            ok = await al._ntfy(title, body, url, [("🛒 Open to buy", url), ("📈 Chart", dex)], "UNCONFIRMED")
+            print(f"ntfy: {'sent to your topic' if ok else 'FAILED - check NTFY_TOPIC / network'}")
+        else:
+            print("ntfy: not set up (NTFY_TOPIC is empty in .env)")
+        backend, status = al.desktop.backend()
+        if cfg["alerts"].get("desktop") and backend:
+            ok = await al.desktop.send(title, body, url) or ok
+        print(f"This computer's pop-ups: {status if cfg['alerts'].get('desktop') else 'off (alerts.desktop: false)'}")
+    finally:
+        await http.aclose()
+        db.close()
+    if ok:
+        print(f"Clicking the notification should open: {url}")
+    return 0 if ok else 1
+
+
+def new_ntfy_topic() -> int:
+    import secrets as pysecrets
+
+    topic = "ccw-" + pysecrets.token_urlsafe(18).replace("_", "x").replace("-", "y")
+    print(f"""Your private alert channel name (keep it secret - it works like a password):
+
+    {topic}
+
+1. Put it in .env on the machine running the bot:   NTFY_TOPIC={topic}
+2. Laptop, no install: open https://ntfy.sh/app -> "Subscribe to topic" -> {topic}
+   -> allow notifications. Or run the native listener: python laptop_notifier.py {topic}
+3. Phone: install the "ntfy" app (App Store / Google Play) -> + -> {topic}
+4. Test it:  python main.py test-notify""")
     return 0
 
 
@@ -228,7 +260,8 @@ def main(argv: list[str] | None = None) -> int:
     lb.add_argument("--min-calls", type=int, default=1)
     sub.add_parser("backtest", help="backtest strategies on recorded outcomes")
     sub.add_parser("qualify", help="paper trading report card")
-    sub.add_parser("test-notify", help="send a sample desktop notification")
+    sub.add_parser("test-notify", help="send a sample alert to ntfy / this computer's pop-ups")
+    sub.add_parser("new-ntfy-topic", help="make a private ntfy channel name for phone + laptop alerts")
     sub.add_parser("x-login", help="register X burner accounts from .env")
     sub.add_parser("telegram-login", help="log in to Telegram (interactive, once)")
     args = p.parse_args(argv)
@@ -257,8 +290,10 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_qualify(cfg, db)
         finally:
             db.close()
+    if args.cmd == "new-ntfy-topic":
+        return new_ntfy_topic()
     if args.cmd == "test-notify":
-        return asyncio.run(test_notify(cfg))
+        return asyncio.run(test_notify(cfg, secrets))
     if args.cmd == "x-login":
         from sources.x_source import add_accounts_from_env
 

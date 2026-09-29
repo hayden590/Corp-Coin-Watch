@@ -142,6 +142,7 @@ DEFAULTS: dict[str, Any] = {
         "desktop": True,
         "desktop_on": ["VERIFIED", "UNCONFIRMED", "DANGER", "UNCHECKED", "EXIT"],
         "buy_link": "",
+        "ntfy_server": "https://ntfy.sh",
         "exit_warnings": True,
         "monitor_hours": 48,
         "source_down_after_failures": 5,
@@ -180,6 +181,7 @@ DEFAULTS: dict[str, Any] = {
         "frontend-api-v3.pump.fun": 20,
         "discord.com": 20,
         "api.telegram.org": 20,
+        "ntfy.sh": 30,
     },
     "logging": {
         "level": "INFO",
@@ -255,6 +257,8 @@ class Secrets:
     etherscan_api_key: str = _secret_field()
     birdeye_api_key: str = _secret_field()
     fomo_api_key: str = _secret_field()
+    ntfy_topic: str = _secret_field()
+    ntfy_token: str = _secret_field()
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> "Secrets":

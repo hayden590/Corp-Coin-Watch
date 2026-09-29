@@ -273,6 +273,27 @@ def format_exit_warning(chain: str, address: str, title: str, flags: list[tuple[
     return text, discord, _clip(tg, 4000)
 
 
+NTFY_STYLE = {  # kind -> (priority 1-5, emoji tag)
+    "EXIT": (5, "warning"), "VERIFIED": (4, "green_circle"), "UNCONFIRMED": (4, "yellow_circle"),
+    "DANGER": (3, "rotating_light"), "UNCHECKED": (3, "grey_question"),
+}
+
+
+def ntfy_payload(topic: str, title: str, body: str, click: str | None, buttons: list[tuple[str, str]],
+                 kind: str | None) -> dict:
+    """JSON publish body for ntfy (https://docs.ntfy.sh/publish/#publish-as-json).
+    Clicking the notification opens `click`; buttons are extra "view" actions."""
+    prio, tag = NTFY_STYLE.get(kind or "", (3, "bell"))
+    p = {"topic": topic, "title": title[:250], "message": body[:1000], "priority": prio, "tags": [tag]}
+    if click and click.startswith(("https://", "http://")):
+        p["click"] = click
+    actions = [{"action": "view", "label": label, "url": url, "clear": True}
+               for label, url in buttons if url and url.startswith(("https://", "http://"))][:3]
+    if actions:
+        p["actions"] = actions
+    return p
+
+
 def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
@@ -291,9 +312,11 @@ class Alerter:
         self.buy_template = acfg.get("buy_link") or ""
         self.desktop_kinds = set(acfg.get("desktop_on") or ["VERIFIED", "UNCONFIRMED", "DANGER", "UNCHECKED", "EXIT"])
         self.desktop = DesktopNotifier(bool(acfg.get("desktop", False)) and not console_only)
-        if not console_only and not (self.use_discord or self.use_telegram or self.desktop.enabled):
-            log.warning("No alert channel configured (set DISCORD_WEBHOOK_URL and/or TELEGRAM_BOT_TOKEN+CHAT_ID, "
-                        "or alerts.desktop: true); alerts will be printed to the console only")
+        self.ntfy_server = (acfg.get("ntfy_server") or "https://ntfy.sh").rstrip("/")
+        self.use_ntfy = bool(getattr(secrets, "ntfy_topic", "")) and not console_only
+        if not console_only and not (self.use_discord or self.use_telegram or self.use_ntfy or self.desktop.enabled):
+            log.warning("No alert channel configured (set NTFY_TOPIC, DISCORD_WEBHOOK_URL and/or "
+                        "TELEGRAM_BOT_TOKEN+CHAT_ID, or alerts.desktop: true); alerts go to the console only")
 
     def buy_url_for(self, verdict_label: str, chain: str, address: str) -> str | None:
         return buy_link(self.buy_template, chain, address) if verdict_label in BUYABLE else None
@@ -311,7 +334,7 @@ class Alerter:
             title, body = a.desktop()
             desk = (title, body, click_link(a.verdict.label, self.buy_template, a.chain, a.address, a.dex_url))
         buttons = ([("🛒 Open to buy", a.buy_url)] if a.buy_url else []) + ([("📈 Chart", a.dex_url)] if a.dex_url else [])
-        sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a), desk, buttons)
+        sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a), desk, buttons, a.verdict.label)
         if not sent:
             return False  # not recorded, so the next pass retries
         self.db.record_alert(a.chain, a.address, "verdict", a.verdict.label, sent,
@@ -327,7 +350,7 @@ class Alerter:
                     click_link("EXIT", self.buy_template, chain, address, dex_url))
         sell = buy_link(self.buy_template, chain, address)
         buttons = ([("💸 Open to sell", sell)] if sell else []) + ([("📈 Chart", dex_url)] if dex_url else [])
-        sent = await self._deliver(text, discord, tg, desk, buttons)
+        sent = await self._deliver(text, discord, tg, desk, buttons, "EXIT")
         if sent:
             self.db.record_alert(chain, address, "exit_warning", None, sent, {"flags": [f for f, _ in flags]})
         return bool(sent)
@@ -337,15 +360,27 @@ class Alerter:
         await self._deliver(text, {"content": _clip(text, 1900), "allowed_mentions": {"parse": []}}, html.escape(text))
         self.db.record_alert("-", "-", "system", None, [], {"message": message})
 
+    async def _ntfy(self, title: str, body: str, click: str | None, buttons: list[tuple[str, str]],
+                    kind: str | None) -> bool:
+        headers = {"Authorization": f"Bearer {self.secrets.ntfy_token}"} if getattr(self.secrets, "ntfy_token", "") else {}
+        r = await self.http.post_json(self.ntfy_server,
+                                      ntfy_payload(self.secrets.ntfy_topic, title, body, click, buttons, kind),
+                                      headers=headers, log_name="ntfy")
+        if not r.ok:
+            log.error("ntfy alert failed: %s", r.error)
+        return r.ok
+
     async def _deliver(self, text: str, discord_payload: dict, telegram_html: str,
                        desktop: tuple[str, str, str | None] | None = None,
-                       buttons: list[tuple[str, str]] | None = None) -> list[str]:
+                       buttons: list[tuple[str, str]] | None = None, kind: str | None = None) -> list[str]:
         sent: list[str] = []
         if desktop and await self.desktop.send(*desktop):
             sent.append("desktop")
+        if desktop and self.use_ntfy and await self._ntfy(*desktop, buttons or [], kind):
+            sent.append("ntfy")
         if not (self.use_discord or self.use_telegram):
-            print(text, flush=True)
-            return sent + ["console"]
+            print(text, flush=True)  # also lands in the server log (journalctl)
+            return sent or ["console"]
         if self.use_discord:
             r = await self.http.post_json(self.secrets.discord_webhook_url, discord_payload,
                                           expect_json=False, log_name="discord-webhook")
