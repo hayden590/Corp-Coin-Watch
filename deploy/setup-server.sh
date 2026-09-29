@@ -38,10 +38,10 @@ else
   git clone --branch "$BRANCH" "$REPO_URL" "$APP"
 fi
 
-echo "==> Installing Python packages"
+echo "==> Installing Python packages (takes 3-6 minutes on a small server - don't press anything)"
 python3 -m venv "$APP/.venv"
-"$APP/.venv/bin/pip" install -q --upgrade pip
-"$APP/.venv/bin/pip" install -q -r "$APP/requirements.txt"
+"$APP/.venv/bin/pip" install --progress-bar on --upgrade pip
+"$APP/.venv/bin/pip" install --progress-bar on -r "$APP/requirements.txt"
 
 echo "==> Server settings"
 [ -f "$APP/.env" ] || cp "$APP/.env.example" "$APP/.env"
