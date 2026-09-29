@@ -68,6 +68,8 @@ class Assessment:
     penalties: list[tuple[str, float]] = field(default_factory=list)
     similar: dict | None = None
     verdict: Verdict | None = None
+    ml_prob: float | None = None       # trained model's chance of hitting the target (None = no trusted model)
+    x_mentions: int | None = None      # recent X posts mentioning this CA
 
     @property
     def total(self) -> float:
@@ -250,4 +252,12 @@ def should_alert(a: Assessment, sources: set[str], cfg: dict) -> tuple[bool, str
         return True, "manual check"
     if a.backing >= float(acfg.get("min_backing_to_alert", 1.0)):
         return True, f"backing {a.backing}"
+    # AI pick: a model that has proven itself on unseen coins rates this highly. It still needs at
+    # least one hard signal (a trusted wallet buying, some backing, or a decent chart) - chatter or
+    # connections alone never trigger an alert.
+    prob_min = float(acfg.get("ai_pick_min_prob", 0.65))
+    hard_signal = (a.backing > 0 or any(b["record"].trusted for b in a.smart_buys)
+                   or (a.chart is not None and (a.chart.quality or 0) >= 0.6))
+    if a.ml_prob is not None and a.ml_prob >= prob_min and hard_signal:
+        return True, f"AI pick ({a.ml_prob:.0%})"
     return False, f"backing {a.backing} < {acfg.get('min_backing_to_alert', 1.0)}"

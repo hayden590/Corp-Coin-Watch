@@ -159,6 +159,11 @@ class AlertContent:
             if self.a.text.main_claims:
                 t += " | claims: " + "; ".join(self.a.text.main_claims[:2])
             out.append(f"Chatter: {t}")
+        if self.a.ml_prob is not None:
+            out.append(f"AI score: {self.a.ml_prob:.0%} chance to hit the target before the stop "
+                       "(model tested on coins it never saw)")
+        if self.a.x_mentions:
+            out.append(f"X buzz: {self.a.x_mentions} recent posts mention this CA")
         if self.a.similar:
             out.append(f"Similar setups: {self.a.similar['text']}")
         return out

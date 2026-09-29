@@ -26,7 +26,7 @@ DEFAULTS: dict[str, Any] = {
         "x_watch_seconds": 240,
         "monitor_seconds": 300,
         "slow_minutes": 20,
-        "fomo_hours": 6,
+        "fomo_hours": 8,
         "jitter_pct": 20,
     },
     "safety": {
@@ -43,8 +43,8 @@ DEFAULTS: dict[str, Any] = {
         "min_global_fees_sol": 1.5,
         "min_fees_to_volume": 0.001,
         "wash_min_volume_usd": 20000,
-        "max_pages": 5,
-        "recheck_minutes": 5,
+        "max_pages": 2,
+        "recheck_minutes": 60,
     },
     "x": {
         "queries": ["pump.fun", "dexscreener.com", "CA:", "contract address"],
@@ -71,8 +71,18 @@ DEFAULTS: dict[str, Any] = {
         "blacklist_min_rug_pct": 50,
     },
     "wallets": {
-        "poll_minutes": 15,
-        "poll_batch": 10,
+        "helius_daily_calls": 300,     # free plan: 1M credits/month at 100 credits a call
+        "auto_discover": True,
+        "discover_gain_pct": 100,
+        "discover_coins_per_run": 2,
+        "discover_max_pages": 6,
+        "buyers_per_coin": 10,
+        "max_auto_wallets": 25,
+        "snipe_skip_seconds": 60,
+        "early_window_minutes": 30,
+        "discover_every_hours": 6,
+        "poll_minutes": 180,
+        "poll_batch": 5,
         "min_history": 10,
         "baseline_win_rate": 0.3,
         "dump_window_minutes": 60,
@@ -107,9 +117,12 @@ DEFAULTS: dict[str, Any] = {
         "bot_duplicate_ratio": 0.5,
     },
     "fomo": {
-        "leaderboard_url": "",
+        # FOMO API (fomoapi.io) - only used when FOMO_API_KEY is set
+        "leaderboard_url": "https://api.fomoapi.io/v2/leaderboard/7d",
+        "user_url": "https://api.fomoapi.io/v2/users/{handle}",
         "theses_url": "",
-        "max_wallets": 50,
+        "max_traders": 15,
+        "resolve_per_run": 3,
     },
     "scoring": {
         "tier1_weight": 3.0,
@@ -139,6 +152,7 @@ DEFAULTS: dict[str, Any] = {
         "telegram": True,
         "danger_alert_sources": ["x", "telegram", "fomo", "manual"],
         "min_backing_to_alert": 1.0,
+        "ai_pick_min_prob": 0.65,
         "desktop": True,
         "desktop_on": ["VERIFIED", "UNCONFIRMED", "DANGER", "UNCHECKED", "EXIT"],
         "buy_link": "",
@@ -154,6 +168,9 @@ DEFAULTS: dict[str, Any] = {
         "slippage_pct": 2.0,
         "train_frac": 0.7,
         "stake_pct": 5,
+        "retrain_hours": 24,
+        "ml_min_test_auc": 0.6,
+        "ml_min_train": 150,
     },
     "strategies": [
         {"name": "backed", "min_verdict": "UNCONFIRMED", "min_backing": 1.5,

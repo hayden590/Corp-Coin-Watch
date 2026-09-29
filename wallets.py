@@ -49,8 +49,34 @@ class WalletRecord:
         return self.multiplier > 0
 
 
+class HeliusBudget:
+    """Helius free plan = 1M credits/month; this API costs 100 credits a call (~330 calls/day).
+    Every Helius call in the bot goes through this daily cap so the free tier never runs dry."""
+
+    limit = 300
+    _day = ""
+    used = 0
+
+    @classmethod
+    def take(cls) -> bool:
+        day = time.strftime("%Y-%m-%d", time.gmtime())
+        if day != cls._day:
+            cls._day, cls.used = day, 0
+        if cls.used >= cls.limit:
+            return False
+        cls.used += 1
+        return True
+
+    @classmethod
+    def left(cls) -> int:
+        return max(0, cls.limit - cls.used) if cls._day == time.strftime("%Y-%m-%d", time.gmtime()) else cls.limit
+
+
 async def helius_transactions(http: Http, api_key: str, address: str, tx_type: str | None = "SWAP",
                               limit: int = 100, before: str | None = None) -> list[dict] | None:
+    if not HeliusBudget.take():
+        log.info("Helius daily budget (%d calls) used up - skipping until tomorrow (UTC)", HeliusBudget.limit)
+        return None
     params = {"api-key": api_key, "limit": limit}
     if tx_type:
         params["type"] = tx_type
@@ -116,6 +142,7 @@ class Wallets:
         self.helius_key = helius_key
         self.etherscan_key = etherscan_key
         self._warned: set[str] = set()
+        HeliusBudget.limit = int(self.cfg.get("helius_daily_calls", 300))
 
     # --- registry -------------------------------------------------------------
     def sync(self, cfg: dict, fomo_wallets: list[dict] | None = None) -> int:
@@ -194,6 +221,80 @@ class Wallets:
         act = await self.fetch_activity(wallet, chain)
         if act is not None:
             self.store(wallet, chain, act)
+
+    # --- auto-discovery of smart wallets ---------------------------------------
+    async def early_buyers(self, pool: str, token: str, since: float) -> list[tuple[str, float, str]]:
+        """Wallets that bought `token` early, after the snipe bots (first `snipe_skip_seconds`) and
+        within `early_window_minutes` of when the bot first saw the coin. Returns (wallet, ts, tx)."""
+        skip = float(self.cfg.get("snipe_skip_seconds", 60))
+        window = float(self.cfg.get("early_window_minutes", 30)) * 60
+        txs: list[dict] = []
+        before = None
+        for _ in range(int(self.cfg.get("discover_max_pages", 6))):
+            page = await helius_transactions(self.http, self.helius_key, pool, "SWAP", 100, before)
+            if not page:
+                break
+            txs += page
+            if min(float(t.get("timestamp") or 0) for t in page) <= since or len(page) < 100:
+                break
+            before = page[-1].get("signature")
+        out, seen = [], set()
+        for tx in sorted(txs, key=lambda t: t.get("timestamp") or 0):
+            ts = float(tx.get("timestamp") or 0)
+            buyer = tx.get("feePayer")
+            if not buyer or buyer in seen or not (since + skip <= ts <= since + window):
+                continue
+            if any(t.get("mint") == token and t.get("toUserAccount") == buyer for t in tx.get("tokenTransfers") or []):
+                seen.add(buyer)
+                out.append((buyer, ts, tx.get("signature") or f"early-{buyer[:8]}-{int(ts)}"))
+        return out
+
+    async def discover(self) -> list[str]:
+        """Find coins the bot watched that then ran (+discover_gain_pct at 1h/6h, not rugged) and
+        start tracking their early buyers. Their track record decides whether they ever count."""
+        if not self.cfg.get("auto_discover", True) or not self.helius_key:
+            return []
+        gain = float(self.cfg.get("discover_gain_pct", 100)) / 100
+        rows = self.db.q(
+            """SELECT o.address, MAX(o.max_gain) AS g, f.first_seen_at, t.pair_address, t.symbol
+               FROM outcomes o
+               JOIN feature_snapshots f ON f.chain = o.chain AND f.address = o.address
+               JOIN tokens t ON t.chain = o.chain AND t.address = o.address
+               WHERE o.chain = 'solana' AND o.horizon IN ('1h', '6h') AND o.rugged = 0 AND o.max_gain >= ?
+                 AND t.pair_address IS NOT NULL AND o.recorded_at >= ?
+               GROUP BY o.address ORDER BY g DESC""", (gain, time.time() - 2 * 86400))
+        added, coins = [], 0
+        for r in rows:
+            if coins >= int(self.cfg.get("discover_coins_per_run", 2)) or HeliusBudget.left() < 20:
+                break
+            if not self.db.mark_seen("wallet_mine", r["address"]):
+                continue
+            coins += 1
+            buyers = await self.early_buyers(r["pair_address"], r["address"], r["first_seen_at"])
+            for wallet, ts, tx in buyers[: int(self.cfg.get("buyers_per_coin", 10))]:
+                new = self.db.x("INSERT OR IGNORE INTO wallets (wallet, chain, label, source) VALUES (?, 'solana', ?, 'auto')",
+                                (wallet, f"auto: early in ${r['symbol'] or '?'}"))
+                # Record the early buy itself so the win counts toward its track record straight away.
+                self.store(wallet, "solana", [{"token": r["address"], "side": "buy", "amount": None, "at": ts, "tx": tx}])
+                if new:
+                    added.append(wallet)
+            log.info("wallet discovery: $%s ran +%.0f%% - %d early buyers, %d new", r["symbol"], r["g"] * 100,
+                     len(buyers), len([b for b in buyers if b[0] in added]))
+        self.prune_auto()
+        return added
+
+    def prune_auto(self) -> int:
+        """Keep at most max_auto_wallets auto-found wallets: drop the ones with the worst records."""
+        cap = int(self.cfg.get("max_auto_wallets", 25))
+        rows = self.db.q("SELECT wallet, chain FROM wallets WHERE source = 'auto'")
+        if len(rows) <= cap:
+            return 0
+        ranked = sorted((self.record(r["wallet"], r["chain"]) for r in rows),
+                        key=lambda rec: ((rec.win_rate or 0) - (rec.rug_rate or 0), rec.resolved))
+        drop = ranked[: len(rows) - cap]
+        for rec in drop:
+            self.db.x("DELETE FROM wallets WHERE wallet = ? AND chain = ? AND source = 'auto'", (rec.wallet, rec.chain))
+        return len(drop)
 
     # --- track records ------------------------------------------------------
     def record(self, wallet: str, chain: str) -> WalletRecord:

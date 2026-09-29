@@ -77,11 +77,28 @@ def test_fomo_generic_parsing():
 
 def test_fomo_fallback_modes():
     src = FomoSource(http_with(lambda r: httpx.Response(403)), DB(), cfg())
-    assert run(src.refresh_wallets()) == ([], None) and src.mode == "fallback"
-    c = cfg(fomo={"leaderboard_url": "https://fomo.example/lb"})
-    src = FomoSource(http_with(lambda r: httpx.Response(403)), DB(), c)
+    assert run(src.refresh_wallets()) == ([], None) and src.mode == "fallback"  # no key -> quiet fallback
+    src = FomoSource(http_with(lambda r: httpx.Response(403)), DB(), cfg(), api_key="k")
     wallets, err = run(src.refresh_wallets())
     assert wallets == [] and "unavailable" in err
+
+
+def test_fomo_leaderboard_handles_resolved_once():
+    lb = {"data": [{"handle": "topdog", "pnl": 99}, {"handle": "second", "pnl": 50}]}
+    user = {"handle": "topdog", "wallets": {"solana": SOL}}
+    calls = []
+
+    def handler(req):
+        calls.append(req.url.path)
+        return httpx.Response(200, json=lb if "leaderboard" in req.url.path else user)
+
+    db = DB()
+    c = cfg(fomo={"leaderboard_url": "https://api.example/v2/leaderboard/7d",
+                  "user_url": "https://api.example/v2/users/{handle}", "resolve_per_run": 1})
+    src = FomoSource(http_with(handler), db, c, api_key="k")
+    wallets, err = run(src.refresh_wallets())
+    assert err is None and wallets[0]["wallet"] == SOL and wallets[0]["label"] == "fomo:topdog"
+    assert sum("/users/" in p for p in calls) == 1  # only one paid lookup per run
 
 
 def test_x_source_keeps_tweets_fetched_before_outage():

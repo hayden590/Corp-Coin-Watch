@@ -11,6 +11,7 @@ Usage:
   python main.py leaderboard        best and worst X accounts that post CAs
   python main.py backtest           replay strategies on recorded outcomes
   python main.py qualify            paper-trading report card ("NO EDGE FOUND" if it fails)
+  python main.py fomo-test          check the FOMO API (Fomo leaderboard traders) connection
   python main.py new-ntfy-topic     make a private channel for phone + laptop pop-ups (ntfy)
   python main.py test-notify        send a sample alert (click it to test the link)
   python main.py x-login            add X burner accounts from .env to twscrape
@@ -158,9 +159,21 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
     tg_ok = Path(str(TG_SESSION) + ".session").exists()
     print(f"\nTelegram: session {'present' if tg_ok else 'missing (run telegram-login)'}, "
           f"{len(cfg.get('channels') or [])} channel(s), last CA message {ts(last_tg)}")
-    print(f"Helius: {'key set' if secrets.helius_api_key else 'no key (Solana wallets + global fees disabled)'}")
+    tracked = db.q("SELECT source, COUNT(*) AS n FROM wallets GROUP BY source")
+    print(f"Helius: {'key set' if secrets.helius_api_key else 'no key (Solana wallets + global fees disabled)'}; "
+          f"budget {cfg['wallets'].get('helius_daily_calls')} calls/day")
+    print("Tracked wallets: " + (", ".join(f"{r['n']} {r['source']}" for r in tracked) or "none yet"))
+    from backtest.engine import MLModel
+
+    model = MLModel.load(MODEL_PATH)
+    if model:
+        print(f"AI model: trained on {getattr(model, 'n_train', 0)} coins, test AUC {getattr(model, 'test_auc', None)} - "
+              f"{'USED for AI picks' if model.trustworthy() else 'not good enough yet, AI picks off'}")
+    else:
+        print("AI model: not trained yet (needs history - retrains daily)")
     fomo_url = (cfg.get("fomo") or {}).get("leaderboard_url")
-    print(f"Fomo: {'endpoint ' + fomo_url if fomo_url else 'fallback mode (fomo_wallets.yaml) - fomo.family has no public API'}")
+    print("Fomo leaderboard traders: " + ("following via FOMO API" if fomo_url and secrets.fomo_api_key
+                                          else "off (add FOMO_API_KEY from fomoapi.io to follow top Fomo traders)"))
     http = make_http(cfg, None)
     from text_analysis import TextAnalyzer
 
@@ -212,6 +225,31 @@ async def test_notify(cfg: dict, secrets: Secrets) -> int:
     return 0 if ok else 1
 
 
+async def fomo_test(cfg: dict, secrets: Secrets) -> int:
+    """Show what the FOMO API leaderboard returns, so the format can be checked/adapted."""
+    import json as _json
+
+    from sources.fomo_source import find_handles, find_wallets
+
+    if not secrets.fomo_api_key:
+        print("Put FOMO_API_KEY in .env first (free key at fomoapi.io - sign in with an email code).")
+        return 1
+    http = make_http(cfg, None)
+    try:
+        r = await http.get_json(cfg["fomo"]["leaderboard_url"], log_name="fomo-leaderboard",
+                                headers={"Authorization": f"Bearer {secrets.fomo_api_key}",
+                                         "X-API-Key": secrets.fomo_api_key})
+    finally:
+        await http.aclose()
+    print(f"Leaderboard: {'OK' if r.ok else 'FAILED'} (HTTP {r.status}) {r.error or ''}")
+    if r.ok:
+        print(f"Traders found: {find_handles(r.data)[:10]}")
+        print(f"Wallets in leaderboard: {len(find_wallets(r.data))}")
+        print("First part of the reply (for Claude to check the format):")
+        print(_json.dumps(r.data)[:800])
+    return 0 if r.ok else 1
+
+
 def new_ntfy_topic() -> int:
     import secrets as pysecrets
 
@@ -261,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("backtest", help="backtest strategies on recorded outcomes")
     sub.add_parser("qualify", help="paper trading report card")
     sub.add_parser("test-notify", help="send a sample alert to ntfy / this computer's pop-ups")
+    sub.add_parser("fomo-test", help="check the FOMO API leaderboard connection")
     sub.add_parser("new-ntfy-topic", help="make a private ntfy channel name for phone + laptop alerts")
     sub.add_parser("x-login", help="register X burner accounts from .env")
     sub.add_parser("telegram-login", help="log in to Telegram (interactive, once)")
@@ -290,6 +329,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_qualify(cfg, db)
         finally:
             db.close()
+    if args.cmd == "fomo-test":
+        return asyncio.run(fomo_test(cfg, secrets))
     if args.cmd == "new-ntfy-topic":
         return new_ntfy_topic()
     if args.cmd == "test-notify":

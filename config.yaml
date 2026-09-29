@@ -10,7 +10,7 @@ poll:
   x_watch_seconds: 240                     # watched accounts (by user ID)
   monitor_seconds: 300                     # follow-ups on alerted coins + paper trades
   slow_minutes: 20                         # wallets, social graph, discovery rules
-  fomo_hours: 6
+  fomo_hours: 8
   jitter_pct: 20
 
 safety:
@@ -29,8 +29,8 @@ fees:
   min_global_fees_sol: 1.5                 # below = "low activity", no alert
   min_fees_to_volume: 0.001                # fees USD / volume USD below this (0.1%)...
   wash_min_volume_usd: 20000               # ...on at least this much volume = "likely wash volume"
-  max_pages: 5                             # Helius pages of 100 swaps per check
-  recheck_minutes: 5
+  max_pages: 2                             # Helius pages of 100 swaps per check
+  recheck_minutes: 60
 
 x:
   queries: ["pump.fun", "dexscreener.com", "CA:", "contract address"]
@@ -50,6 +50,10 @@ discovery:                                 # auto-promotion to tier 2 / auto-bla
   blacklist_min_rug_pct: 50
 
 wallets:
+  helius_daily_calls: 300                  # Helius free plan: 1M credits/month, 100 per call
+  auto_discover: true                      # track early buyers of coins that ran
+  max_auto_wallets: 15
+  poll_minutes: 240                        # how often each tracked wallet is checked
   min_history: 10                          # resolved trades before a wallet affects scoring
   dump_window_minutes: 60                  # signal account's wallet sells within this after posting = DANGER
 
@@ -65,10 +69,11 @@ text:
   ollama_model: llama3.1:8b
 
 fomo:
-  # fomo.family has no public API. Point these at a JSON endpoint you're
-  # allowed to use (FOMO_API_KEY in .env); otherwise fomo_wallets.yaml is used.
-  leaderboard_url: ""
-  theses_url: ""                           # use {address} as placeholder
+  # Follows Fomo's top traders via FOMO API (fomoapi.io, free key: 250k credits/month).
+  # Put FOMO_API_KEY in .env. Check the connection with: python main.py fomo-test
+  leaderboard_url: https://api.fomoapi.io/v2/leaderboard/7d
+  user_url: https://api.fomoapi.io/v2/users/{handle}
+  max_traders: 15                          # follow the top N traders
 
 scoring:                                   # all weights
   tier1_weight: 3.0                        # tier-1 DIRECT engagement with the CA only
@@ -99,7 +104,8 @@ alerts:
   # Page to open for VERIFIED/UNCONFIRMED coins, e.g. your Fomo token page.
   # Use {chain} and {address}. Empty = DexScreener. DANGER/UNCHECKED never open this.
   buy_link: ""
-  min_backing_to_alert: 1.0                # only backing / official confirmation can trigger an alert
+  min_backing_to_alert: 1.0                # backing / official confirmation / proven AI pick trigger alerts
+  ai_pick_min_prob: 0.65                   # AI pick: model's chance of hitting the target
   danger_alert_sources: [x, telegram, fomo, manual]
   exit_warnings: true
   monitor_hours: 48

@@ -216,6 +216,12 @@ def best_threshold(train: list[dict], test: list[dict], base_rule: dict, key: st
 class MLModel:
     def __init__(self, model, keys: list[str], medians: dict, kind: str):
         self.model, self.keys, self.medians, self.kind = model, keys, medians, kind
+        self.test_auc: float | None = None   # measured on newer coins it never trained on
+        self.n_train = 0
+
+    def trustworthy(self, min_auc: float = 0.6, min_train: int = 150) -> bool:
+        """Only let the model drive alerts once it has proven itself out-of-sample."""
+        return (getattr(self, "test_auc", None) or 0) >= min_auc and getattr(self, "n_train", 0) >= min_train
 
     def vector(self, f: dict) -> list[float]:
         return [float(f[k]) if isinstance(f.get(k), (int, float)) else self.medians[k] for k in self.keys]
@@ -265,6 +271,7 @@ def train_ml(train: list[dict], test: list[dict], tp: float, sl: float) -> tuple
         auc = roc_auc_score(ys, probs) if len(set(ys)) > 1 else None
         train_auc = roc_auc_score([y for _, y in tr], [m.predict(f) for f, _ in tr])
         results[kind] = {"test_auc": None if auc is None else round(auc, 3), "train_auc": round(train_auc, 3)}
+        m.test_auc, m.n_train = auc, len(tr)
         if auc is not None and (best is None or auc > results[best.kind]["test_auc"]):
             best = m
     results["chosen"] = best.kind if best else None

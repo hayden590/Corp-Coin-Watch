@@ -27,9 +27,9 @@ from safety import FAIL, SafetyChecker, SafetyReport
 from scoring import DANGER, Assessment, Verdict, score, should_alert
 from sources.dex_source import DexScreener, MarketInfo
 from sources.telegram_source import TgMessage, channel_map
-from sources.x_source import XTweet
+from sources.x_source import XTweet, XUnavailable
 from text_analysis import TextAnalyzer
-from verify import Verifier
+from verify import Verifier, ca_in_text
 from wallets import Wallets
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ class Pipeline:
         self.text = TextAnalyzer(db, http, cfg, secrets.anthropic_api_key)
         self.paper = PaperTrader(db, cfg, model_path)
         self.channels = channel_map(cfg.get("channels") or [])
+        self._x_cache: dict[str, tuple[float, list[str]]] = {}
         self.wallets.sync(cfg)
 
     # --- entry points -------------------------------------------------------
@@ -166,20 +167,26 @@ class Pipeline:
         self.charts.snapshot_market(market, report.holder_count, report.top10_pct)
         a = Assessment(chain, address, report, market)
         basic_ok = not any(c.status == FAIL for c in report.checks)
-        if basic_ok:
-            a.fees = await self.fees.check(market)
         a.legit = await self.verifier.assess(address, market.name, market.symbol, links.get("website") or [])
         a.smart_buys = self.wallets.smart_buys(address)
         a.dump_flags = self.wallets.dump_flags(address)
         inputs = self._backing_inputs(address)
         score(a, self.cfg, inputs)  # preliminary: decides whether deep analysis is worth the API calls
+        self._ai_score(a)
 
         sources = {s["source"] for s in self.db.sightings_for(address)}
-        if basic_ok and not a.verdict.is_danger and (sources & SOCIAL or a.backing > 0):
+        promising = (sources & SOCIAL or a.backing > 0 or
+                     (a.ml_prob is not None and a.ml_prob >= float(self.cfg["alerts"].get("ai_pick_min_prob", 0.65)) - 0.1))
+        if basic_ok and not a.verdict.is_danger and promising:
+            # Paid / rate-limited lookups only for coins worth it (Helius free tier is ~300 calls/day).
+            a.fees = await self.fees.check(market)
             a.connections = await self.graph.analyse(address, chain, links, market.dex_id, report.deployer)
             a.chart = await self.charts.analyse(market)
-            a.text = await self.text.analyse(chain, address, f"{market.name} ({market.symbol})")
+            x_posts = await self._x_chatter(address)
+            a.x_mentions = len(x_posts) if x_posts is not None else None
+            a.text = await self.text.analyse(chain, address, f"{market.name} ({market.symbol})", x_posts)
             score(a, self.cfg, inputs)
+            self._ai_score(a)
         a.exit_flags = [(r["flag"], r["detail"]) for r in
                         self.db.q("SELECT flag, detail FROM exit_flags WHERE chain = ? AND address = ?", (chain, address))]
         a.similar = engine.similar_stats(self.db, a.verdict.label, a.backing, chain, self.cfg)
@@ -206,6 +213,37 @@ class Pipeline:
             self.paper.on_alert(a)
         return Result(address, "alerted" if sent else "not_alerted", chain, a.verdict, report, a,
                       None if sent else "verdict unchanged")
+
+    def _ai_score(self, a: Assessment) -> None:
+        """Model's chance this coin hits the target - only from a model that proved itself on unseen coins."""
+        model = self.paper.ml()
+        bt = self.cfg.get("backtest") or {}
+        if model and model.trustworthy(float(bt.get("ml_min_test_auc", 0.6)), int(bt.get("ml_min_train", 150))):
+            try:
+                a.ml_prob = round(model.predict(a.features()), 3)
+            except Exception as exc:  # a stale model must never break the pipeline
+                log.warning("AI score failed: %s", exc)
+
+    async def _x_chatter(self, address: str) -> list[str] | None:
+        """Recent X posts mentioning this CA (cached 30 min per coin to save the X budget)."""
+        if not self.x:
+            return None
+        hit = self._x_cache.get(address)
+        if hit and time.time() - hit[0] < 1800:
+            return hit[1]
+        try:
+            tweets = await self.x.search(address, int((self.cfg.get("x") or {}).get("chatter_limit", 25)))
+        except XUnavailable as exc:
+            log.info("X chatter skipped: %s", exc)
+            return None
+        tweets = [t for t in tweets if ca_in_text(address, t.all_text())]  # X search is fuzzy: exact CA only
+        texts = [t.text for t in tweets if t.text]
+        for t in tweets:  # every poster becomes a sighting, so discovery learns who calls coins early
+            if self.db.add_sighting(Sighting(address, "x", t.id, None, "token", t.user.handle, t.url, t.text,
+                                             author_id=t.user.id)):
+                self.discovery.observe_user(t.user)
+        self._x_cache[address] = (time.time(), texts)
+        return texts
 
     def _backing_inputs(self, address: str) -> dict:
         endorsements = []

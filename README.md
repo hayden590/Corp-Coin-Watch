@@ -144,7 +144,7 @@ python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
 python main.py test-notify        # send a sample alert
-python -m pytest                  # 168 tests
+python -m pytest                  # 174 tests
 ```
 
 ## How a coin is judged
@@ -199,6 +199,27 @@ python -m pytest                  # 168 tests
     - smart wallets exiting
     - holders dropping
     - buys fading while price is still up
+
+## Learns by itself (no lists needed)
+
+- **Smart wallets from any trading app.** The bot reads the blockchain, so it covers traders on every
+  app (Fomo, Photon, Axiom, BullX, …).
+  - When a coin it watched runs (+100% at 1h/6h, no rug), it records who bought *early*. It skips the
+    snipe bots in the first 60 seconds.
+  - It keeps the best 15 of those wallets and watches what they buy next.
+  - A wallet only counts toward alerts once it has a real track record (10 resolved trades).
+  - Needs `HELIUS_API_KEY`. The free plan allows about 300 calls a day, which the bot enforces.
+- **Fomo leaderboard traders.** With a free `FOMO_API_KEY` from [fomoapi.io](https://fomoapi.io), the bot follows
+  Fomo's top traders' wallets. It looks up each trader once, so it stays within the free credits. Check the
+  connection with `python main.py fomo-test`.
+- **AI picks.** Every day the bot retrains a model on everything it has seen, always tested on newer coins
+  it didn't train on.
+  - Only if that test is good enough (AUC ≥ 0.6, 150+ coins) will it alert on its own. The model must rate
+    the coin at 65% or more *and* there must be a hard signal: a trusted wallet buying, some backing, or a
+    decent chart.
+  - Expect this to take a few weeks of history.
+- **X chatter.** For promising coins it searches X for the exact contract address, rates what people
+  say, and learns which accounts call coins early. Needs X burner accounts (`x-login`).
 
 ## Learning and the edge test
 

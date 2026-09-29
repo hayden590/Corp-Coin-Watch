@@ -35,6 +35,8 @@ class Monitor:
         self.telegram = telegram
         self.fomo = fomo
         self._fomo_alerted = False
+        self._last_discover = 0.0
+        self._last_retrain = 0.0
 
     async def supervise(self, name: str, step: Callable[[], Awaitable[None]], interval: Callable[[], float]) -> None:
         backoff = 30.0
@@ -161,6 +163,24 @@ class Monitor:
                 log.info("slow step X work skipped: %s", exc)
         for change in self.pipe.discovery.apply_rules():
             await self.pipe.alerter.send_system(f"discovery: {change}")
+        wcfg = self.cfg.get("wallets") or {}
+        if time.time() - self._last_discover >= float(wcfg.get("discover_every_hours", 6)) * 3600:
+            self._last_discover = time.time()
+            added = await self.pipe.wallets.discover()
+            if added:
+                log.info("wallet discovery: now tracking %d new early-buyer wallet(s)", len(added))
+        bt = self.cfg.get("backtest") or {}
+        if self.pipe.paper.model_path and time.time() - self._last_retrain >= float(bt.get("retrain_hours", 24)) * 3600:
+            self._last_retrain = time.time()
+            await asyncio.to_thread(self._retrain)
+
+    def _retrain(self) -> None:
+        """Daily: retrain the AI on everything seen so far (time-split); AI picks only use it if it tests well."""
+        from backtest import engine
+
+        rep = engine.run(self.db, self.cfg, self.pipe.paper.model_path)
+        self.pipe.paper._ml_loaded_at = 0  # reload the fresh model
+        log.info("AI retrain: %s", rep.get("error") or rep.get("ml"))
 
     # --- run ------------------------------------------------------------------
     async def run(self) -> None:
