@@ -1,0 +1,26 @@
+[
+  {
+    "url": "https://dexscreener.com/solana/6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU",
+    "chainId": "solana",
+    "tokenAddress": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU",
+    "description": "GoodCat - the goodest cat on Solana.",
+    "links": [
+      {"type": "twitter", "url": "https://x.com/goodcat_sol"},
+      {"type": "telegram", "url": "https://t.me/goodcat_sol"},
+      {"label": "Website", "url": "https://goodcat.example"}
+    ]
+  },
+  {
+    "url": "https://dexscreener.com/solana/755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk",
+    "chainId": "solana",
+    "tokenAddress": "755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk",
+    "description": "FeedRug to the moon",
+    "links": []
+  },
+  {
+    "url": "https://dexscreener.com/tron/TXYZabc",
+    "chainId": "tron",
+    "tokenAddress": "TXYZabc",
+    "links": []
+  }
+]

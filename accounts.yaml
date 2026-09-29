@@ -1,0 +1,6 @@
+# Official org accounts (used from phase 2). Always match on x_user_id, never display name.
+# - handle: exampleorg
+#   x_user_id: "1234567890"
+#   domains: [example.com]
+#   chains: [solana]
+accounts: []

@@ -1,0 +1,43 @@
+# corp-coin-watch config. Every value here is optional: anything missing falls
+# back to the defaults in config.py. Delete a line to use the default.
+
+# Chains to watch (DexScreener chain IDs).
+chains: [solana, ethereum, base, bsc]
+
+poll:
+  dexscreener_seconds: 90     # token-profile feed poll interval
+  jitter_pct: 20              # randomise intervals by +/- this percent
+
+safety:
+  min_liquidity_usd: 10000
+  max_top10_holder_pct: 30    # excluding LP / bonding curve / burn / locker accounts
+  max_buy_tax_pct: 10
+  max_sell_tax_pct: 10
+  min_lp_locked_pct: 80       # below this = warning (not fail)
+  warn_pair_age_minutes: 10   # pairs younger than this get a warning
+  recheck_minutes: 30         # cache safety results this long
+
+alerts:
+  discord: true               # needs DISCORD_WEBHOOK_URL
+  telegram: true              # needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+  # DANGER coins from these sources get a "DO NOT BUY" alert. Coins that only
+  # showed up in the DexScreener feed and fail safety are logged, not alerted.
+  danger_alert_sources: [x, telegram, fomo, manual]
+  # Send "source down" alerts after this many consecutive failures.
+  source_down_after_failures: 5
+
+# Requests per minute per API host (be polite; stay under published limits).
+rate_limits:
+  api.dexscreener.com: 50
+  api.rugcheck.xyz: 30
+  api.gopluslabs.io: 20
+  discord.com: 20
+  api.telegram.org: 20
+
+logging:
+  level: INFO
+  file: logs/corp-coin-watch.log
+  max_bytes: 5000000
+  backups: 5
+
+db_path: data/corp-coin-watch.db

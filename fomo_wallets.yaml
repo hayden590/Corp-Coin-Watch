@@ -1,0 +1,2 @@
+# Fallback Fomo trader wallets if fomo.family can't be scraped (used from phase 4).
+wallets: []

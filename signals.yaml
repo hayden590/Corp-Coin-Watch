@@ -1,0 +1,10 @@
+# Influential accounts (used from phase 3).
+# tier 1 = mega public figures (manual only), tier 2 = top traders.
+# - handle: sometrader
+#   x_user_id: "1234567890"
+#   tier: 2
+#   weight: 1.0
+#   wallets: [{address: "...", chain: solana}]
+signals: []
+force_include: []   # x_user_ids always treated as signals
+force_block: []     # x_user_ids always ignored / penalised

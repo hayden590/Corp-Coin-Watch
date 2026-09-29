@@ -1,0 +1,5 @@
+# Manually tracked wallets (used from phase 4).
+# - wallet: "..."
+#   chain: solana
+#   label: whale-1
+wallets: []

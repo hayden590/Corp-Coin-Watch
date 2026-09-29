@@ -1,0 +1,5 @@
+# Telegram channels (used from phase 2).
+# - channel: somechannel      # username or numeric id
+#   label: Some Calls
+#   weight: 1.0
+channels: []

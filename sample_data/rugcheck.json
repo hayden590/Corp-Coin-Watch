@@ -1,0 +1,40 @@
+{
+  "_comment": "Keyed by mint. Missing mint = RugCheck returns 404 (simulates an API gap).",
+  "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU": {
+    "mint": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU",
+    "mintAuthority": null, "freezeAuthority": null,
+    "score": 1, "score_normalised": 1, "rugged": false,
+    "risks": [],
+    "markets": [{"pubkey": "9TUYNnUzwyQnGfMyMAAarvK5qrqrYevPphXjcBEvsfqv", "marketType": "raydium", "lp": {"lpLockedPct": 100}}],
+    "knownAccounts": {"G7mEf798dvBi7FcRuf9aq166batH2EKK5TWipcPtZS4D": {"name": "Raydium", "type": "AMM"}},
+    "topHolders": [
+      {"address": "h0", "owner": "G7mEf798dvBi7FcRuf9aq166batH2EKK5TWipcPtZS4D", "pct": 22.0},
+      {"address": "h1", "owner": "o1", "pct": 3.1}, {"address": "h2", "owner": "o2", "pct": 2.5},
+      {"address": "h3", "owner": "o3", "pct": 2.2}, {"address": "h4", "owner": "o4", "pct": 2.0},
+      {"address": "h5", "owner": "o5", "pct": 1.8}, {"address": "h6", "owner": "o6", "pct": 1.6},
+      {"address": "h7", "owner": "o7", "pct": 1.5}, {"address": "h8", "owner": "o8", "pct": 1.2},
+      {"address": "h9", "owner": "o9", "pct": 1.1}, {"address": "h10", "owner": "o10", "pct": 1.0}
+    ]
+  },
+  "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93": {
+    "mint": "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93",
+    "token": {"mintAuthority": "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn", "freezeAuthority": null},
+    "score": 18500, "score_normalised": 72, "rugged": false,
+    "risks": [
+      {"name": "Mint Authority still enabled", "level": "danger", "score": 30000},
+      {"name": "Top 10 holders high ownership", "level": "danger", "score": 5000},
+      {"name": "Low amount of LP Providers", "level": "warn", "score": 400}
+    ],
+    "markets": [{"pubkey": "AWBhBAwfDChkjYSy8HfDsJGVKmP7Rjf1HPgSHKcnyHwr", "lp": {"lpLockedPct": 0}}],
+    "knownAccounts": {"DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn": {"name": "Creator", "type": "CREATOR"}},
+    "topHolders": [
+      {"address": "r1", "owner": "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn", "pct": 41.0, "insider": true},
+      {"address": "r2", "owner": "x2", "pct": 12.0, "insider": true},
+      {"address": "r3", "owner": "x3", "pct": 9.0}
+    ]
+  },
+  "755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk": {
+    "mintAuthority": null, "freezeAuthority": null, "risks": [{"name": "Low Liquidity", "level": "danger"}],
+    "markets": [], "topHolders": [{"address": "f1", "owner": "fo1", "pct": 8.0}]
+  }
+}

@@ -1,0 +1,22 @@
+# Secrets
+.env
+*.session
+*.session-journal
+
+# State
+data/
+*.db
+*.sqlite
+*.sqlite3
+accounts.db
+
+# Logs & caches
+logs/
+*.log
+__pycache__/
+.pytest_cache/
+.cache/
+
+# Env
+.venv/
+venv/

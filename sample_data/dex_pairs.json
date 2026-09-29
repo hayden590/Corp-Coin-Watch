@@ -1,0 +1,80 @@
+{
+  "_comment": "Keyed by token address. pairCreatedMinutesAgo is converted to pairCreatedAt at load time.",
+  "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU": [
+    {
+      "chainId": "solana", "dexId": "raydium",
+      "url": "https://dexscreener.com/solana/9TUYNnUzwyQnGfMyMAAarvK5qrqrYevPphXjcBEvsfqv",
+      "pairAddress": "9TUYNnUzwyQnGfMyMAAarvK5qrqrYevPphXjcBEvsfqv",
+      "baseToken": {"address": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU", "name": "GoodCat", "symbol": "GCAT"},
+      "priceUsd": "0.00123",
+      "txns": {"h1": {"buys": 420, "sells": 180}},
+      "volume": {"h24": 910000, "h1": 120000, "m5": 9000},
+      "priceChange": {"h1": 12.5, "h24": 80.2},
+      "liquidity": {"usd": 85000},
+      "fdv": 1230000, "marketCap": 1230000,
+      "pairCreatedMinutesAgo": 180,
+      "info": {"websites": [{"url": "https://goodcat.example"}], "socials": [{"type": "twitter", "url": "https://x.com/goodcat_sol"}]}
+    },
+    {
+      "chainId": "solana", "dexId": "meteora",
+      "url": "https://dexscreener.com/solana/smallpool",
+      "pairAddress": "smallpool",
+      "baseToken": {"address": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU", "name": "GoodCat", "symbol": "GCAT"},
+      "liquidity": {"usd": 3000}, "pairCreatedMinutesAgo": 60
+    }
+  ],
+  "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93": [
+    {
+      "chainId": "solana", "dexId": "raydium",
+      "url": "https://dexscreener.com/solana/AWBhBAwfDChkjYSy8HfDsJGVKmP7Rjf1HPgSHKcnyHwr",
+      "pairAddress": "AWBhBAwfDChkjYSy8HfDsJGVKmP7Rjf1HPgSHKcnyHwr",
+      "baseToken": {"address": "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93", "name": "RugDog", "symbol": "RDOG"},
+      "priceUsd": "0.0004",
+      "volume": {"h24": 50000}, "priceChange": {"h1": 150.0},
+      "liquidity": {"usd": 22000}, "fdv": 400000,
+      "pairCreatedMinutesAgo": 25
+    }
+  ],
+  "755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk": [
+    {
+      "chainId": "solana", "dexId": "raydium",
+      "url": "https://dexscreener.com/solana/8AjqknpRdWKcVk6BJQBJcFve8uGj8hbiZvcoPRnfrUD",
+      "pairAddress": "8AjqknpRdWKcVk6BJQBJcFve8uGj8hbiZvcoPRnfrUD",
+      "baseToken": {"address": "755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk", "name": "FeedRug", "symbol": "FRUG"},
+      "liquidity": {"usd": 1800}, "fdv": 9000,
+      "pairCreatedMinutesAgo": 4
+    }
+  ],
+  "HJ87zeJYVao2wAJGC4jhpaUY7QhBqjnVw5SoyBNdWRuY": [
+    {
+      "chainId": "solana", "dexId": "pumpfun",
+      "url": "https://dexscreener.com/solana/93Vy3eut6PEaU2wuztksywyNvJXzCKfLun2E1Drw4v1M",
+      "pairAddress": "93Vy3eut6PEaU2wuztksywyNvJXzCKfLun2E1Drw4v1M",
+      "baseToken": {"address": "HJ87zeJYVao2wAJGC4jhpaUY7QhBqjnVw5SoyBNdWRuY", "name": "BondCurve", "symbol": "BOND"},
+      "marketCap": 28000, "fdv": 28000,
+      "pairCreatedMinutesAgo": 7
+    }
+  ],
+  "0xa55e2e3846a51f6ad0abfdfbdea2ba0e5e0c76b5": [
+    {
+      "chainId": "base", "dexId": "uniswap",
+      "url": "https://dexscreener.com/base/0x70ab1822ef1bd3d694d5ca5d3c051797b8f804cd",
+      "pairAddress": "0x70ab1822ef1bd3d694d5ca5d3c051797b8f804cd",
+      "baseToken": {"address": "0xA55E2e3846a51f6ad0abfdFbdea2BA0E5E0c76B5", "name": "HoneyPot Inu", "symbol": "HONEY"},
+      "liquidity": {"usd": 40000}, "fdv": 800000,
+      "pairCreatedMinutesAgo": 45
+    }
+  ],
+  "0x74fa5327cc0f4e947789dd5e989a61a8242986a5": [
+    {
+      "chainId": "ethereum", "dexId": "uniswap",
+      "url": "https://dexscreener.com/ethereum/0x1c754defd932f94bdffd3a9a3f53cb56ac89770f",
+      "pairAddress": "0x1c754defd932f94bdffd3a9a3f53cb56ac89770f",
+      "baseToken": {"address": "0x74fa5327cc0f4e947789dd5e989a61a8242986a5", "name": "SafeFrog", "symbol": "SFROG"},
+      "priceUsd": "0.02",
+      "volume": {"h24": 350000}, "priceChange": {"h1": -3.2},
+      "liquidity": {"usd": 150000}, "fdv": 2000000,
+      "pairCreatedMinutesAgo": 900
+    }
+  ]
+}
