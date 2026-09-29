@@ -190,7 +190,7 @@ DEFAULTS: dict[str, Any] = {
         "api.dexscreener.com": 50,
         "api.rugcheck.xyz": 30,
         "api.gopluslabs.io": 20,
-        "api.geckoterminal.com": 25,
+        "api.geckoterminal.com": 9,
         "public-api.birdeye.so": 30,
         "api.helius.xyz": 60,
         "eth.blockscout.com": 6,

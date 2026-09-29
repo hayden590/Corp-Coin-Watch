@@ -209,7 +209,7 @@ class Charts:
         net = GT_NETWORKS.get(chain)
         if net and pool:
             r = await self.http.get_json(f"{GT_BASE}/networks/{net}/pools/{pool}/ohlcv/{unit}",
-                                         params={"aggregate": agg, "limit": limit, "currency": "usd"})
+                                         params={"aggregate": agg, "limit": limit, "currency": "usd"}, retries=1)
             out = parse_gt(r.data) if r.ok else None
         if out is None and self.birdeye_key:
             now = int(time.time())
@@ -231,18 +231,19 @@ class Charts:
                                               AND taken_at >= ? ORDER BY taken_at""", (chain, address, since))]
 
     async def analyse(self, m: MarketInfo) -> ChartReport:
-        c1 = await self.candles(m.chain, m.pair_address, m.address, "1m")
+        # GeckoTerminal's free API is strict (~10 calls/min in practice), so only two calls per coin:
+        # 5m candles (15m change = 3 candles back) and 1h candles. 1m candles only when
+        # charts.fetch_1m is on.
+        c1 = await self.candles(m.chain, m.pair_address, m.address, "1m") if self.cfg.get("fetch_1m") else None
         c5 = await self.candles(m.chain, m.pair_address, m.address, "5m")
-        c15 = await self.candles(m.chain, m.pair_address, m.address, "15m")
         c1h = await self.candles(m.chain, m.pair_address, m.address, "1h")
+        c15 = None
         f: dict = {}
         if c1:
             f["change_1m"] = pct_change(c1, 1)
         if c5:
             f.update(change_5m=pct_change(c5, 1), vol_ratio_5m=vol_ratio(c5), volatility_5m=volatility(c5),
-                     structure=structure(c5[-36:]))
-        if c15:
-            f["change_15m"] = pct_change(c15, 1)
+                     structure=structure(c5[-36:]), change_15m=pct_change(c5, 3))
         f["change_1h"] = (pct_change(c1h, 1) if c1h and len(c1h) > 1 else None) or m.price_change_h1
         longest = c1h if c1h and len(c1h) > 3 else c15 or c5
         f["ath_distance_pct"] = ath_distance(longest) if longest else None
