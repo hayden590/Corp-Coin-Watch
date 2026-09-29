@@ -132,11 +132,12 @@ FOMOAPI_REPLY = {"window": "7d", "source": "fomo-live", "count": 150, "traders":
 def test_fomoapi_leaderboard_format_uses_real_wallets_not_their_coins():
     from sources.fomo_source import parse_fomoapi_leaderboard
 
-    ws = parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15)
+    ws = parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15, include_evm=True)
     assert [w["label"] for w in ws] == ["fomo #1 0xAvast", "fomo #1 0xAvast", "fomo #2 Troupe KZ"]
     assert {w["chain"] for w in ws} == {"solana", "base"}
+    assert {w["chain"] for w in parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15)} == {"solana"}  # default: Solana only
     assert all("pump" not in w["wallet"] for w in ws)  # the coin in topTokens is NOT a wallet
-    assert len(parse_fomoapi_leaderboard(FOMOAPI_REPLY, 1)) == 2  # top 1 trader = their 2 wallets
+    assert len(parse_fomoapi_leaderboard(FOMOAPI_REPLY, 1, include_evm=True)) == 2  # top trader's 2 wallets
     assert all("pump" not in w["wallet"] for w in find_wallets(FOMOAPI_REPLY))  # generic scan fixed too
 
 
@@ -151,7 +152,7 @@ def test_leaderboard_refresh_drops_traders_who_fell_off():
 
     removed = w.replace_fomo(cfg(), parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15))
     rows = {r["wallet"] for r in db.q("SELECT wallet FROM wallets WHERE source = 'fomo'")}
-    assert removed == 1 and len(rows) == 3 and "98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump" not in rows
+    assert removed == 1 and len(rows) == 2 and "98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump" not in rows
 
 
 def test_x_cookie_accounts_parse_with_semicolons(tmp_path, monkeypatch):

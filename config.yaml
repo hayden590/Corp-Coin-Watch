@@ -74,6 +74,7 @@ fomo:
   leaderboard_url: https://api.fomoapi.io/v2/leaderboard/7d
   user_url: https://api.fomoapi.io/v2/users/{handle}
   max_traders: 15                          # follow the top N traders
+  include_evm: false                       # true = also follow their Base wallets
 
 scoring:                                   # all weights
   tier1_weight: 3.0                        # tier-1 DIRECT engagement with the CA only

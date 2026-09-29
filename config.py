@@ -122,6 +122,7 @@ DEFAULTS: dict[str, Any] = {
         "user_url": "https://api.fomoapi.io/v2/users/{handle}",
         "theses_url": "",
         "max_traders": 15,
+        "include_evm": False,       # also follow their Base wallets (free Blockscout is easily rate-limited)
         "resolve_per_run": 3,
     },
     "scoring": {
@@ -192,8 +193,8 @@ DEFAULTS: dict[str, Any] = {
         "api.geckoterminal.com": 25,
         "public-api.birdeye.so": 30,
         "api.helius.xyz": 60,
-        "eth.blockscout.com": 20,
-        "base.blockscout.com": 20,
+        "eth.blockscout.com": 6,
+        "base.blockscout.com": 6,
         "api.etherscan.io": 20,
         "frontend-api-v3.pump.fun": 20,
         "discord.com": 20,

@@ -193,9 +193,10 @@ class Wallets:
                   "page": 1, "offset": 50}
         if self.etherscan_key and chain in EVM_CHAIN_IDS:
             r = await self.http.get_json(ETHERSCAN_V2, params={**params, "chainid": EVM_CHAIN_IDS[chain],
-                                                                "apikey": self.etherscan_key})
+                                                                "apikey": self.etherscan_key}, retries=1)
         elif chain in BLOCKSCOUT:
-            r = await self.http.get_json(BLOCKSCOUT[chain], params=params)
+            # Free explorer: one retry at most - a busy explorer just gets checked next round.
+            r = await self.http.get_json(BLOCKSCOUT[chain], params=params, retries=1)
         else:
             self._warn_once(chain, f"{chain} wallet tracking needs ETHERSCAN_API_KEY - skipped")
             return None

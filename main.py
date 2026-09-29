@@ -245,7 +245,7 @@ async def fomo_test(cfg: dict, secrets: Secrets) -> int:
     if r.ok:
         print(f"Traders found: {find_handles(r.data)[:10]}")
         top = int(cfg["fomo"].get("max_traders", 15))
-        parsed = parse_fomoapi_leaderboard(r.data, top)
+        parsed = parse_fomoapi_leaderboard(r.data, top, bool(cfg["fomo"].get("include_evm", False)))
         ws = parsed if parsed is not None else find_wallets(r.data)[:top]
         print(f"Following the top {top} traders: {len(ws)} wallets")
         for w in ws[:6]:

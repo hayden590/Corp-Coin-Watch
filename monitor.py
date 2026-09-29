@@ -179,7 +179,15 @@ class Monitor:
         """Daily: retrain the AI on everything seen so far (time-split); AI picks only use it if it tests well."""
         from backtest import engine
 
-        rep = engine.run(self.db, self.cfg, self.pipe.paper.model_path)
+        from db import DB
+
+        # Runs in a worker thread, and a SQLite connection can't be shared across threads: open our own.
+        db = DB(self.db.path) if self.db.path != ":memory:" else self.db
+        try:
+            rep = engine.run(db, self.cfg, self.pipe.paper.model_path)
+        finally:
+            if db is not self.db:
+                db.close()
         self.pipe.paper._ml_loaded_at = 0  # reload the fresh model
         log.info("AI retrain: %s", rep.get("error") or rep.get("ml"))
 

@@ -125,3 +125,24 @@ def test_qualify_says_no_edge_found():
     db = DB()
     ok, text = qualify(db, cfg())
     assert not ok and "NO EDGE FOUND" in text and "[FAIL]" in text
+
+
+def test_retrain_runs_in_a_worker_thread_with_its_own_connection(tmp_path):
+    """Regression: the daily retrain used the main SQLite connection from another thread and crashed."""
+    import asyncio
+
+    from monitor import Monitor
+
+    db = DB(tmp_path / "live.db")
+    synthetic_history(db, n=60)
+
+    class P:
+        class paper:
+            model_path = tmp_path / "model.pkl"
+            _ml_loaded_at = 1
+
+    P.db = db
+    m = Monitor.__new__(Monitor)
+    m.db, m.cfg, m.pipe = db, cfg(), P
+    asyncio.run(asyncio.to_thread(m._retrain))  # raised sqlite3.ProgrammingError before the fix
+    assert P.paper._ml_loaded_at == 0
