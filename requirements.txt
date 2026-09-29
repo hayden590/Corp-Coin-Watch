@@ -8,6 +8,9 @@ base58>=2.1
 twscrape>=0.17          # X via burner accounts (no paid API)
 telethon>=1.36          # Telegram via your own account
 
+# Desktop notifications (Windows). macOS: `brew install terminal-notifier`
+win11toast>=0.35; sys_platform == "win32"
+
 # Optional extras (the bot runs without them)
 anthropic>=1.0          # text analysis with the Claude API (text.backend: claude)
 scikit-learn>=1.4       # optional ML in the backtester

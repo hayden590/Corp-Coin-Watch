@@ -11,6 +11,7 @@ Usage:
   python main.py leaderboard        best and worst X accounts that post CAs
   python main.py backtest           replay strategies on recorded outcomes
   python main.py qualify            paper-trading report card ("NO EDGE FOUND" if it fails)
+  python main.py test-notify        send a sample desktop notification (click it to test the link)
   python main.py x-login            add X burner accounts from .env to twscrape
   python main.py telegram-login     log in to Telegram once (creates the local session)
 """
@@ -164,6 +165,10 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
 
     print(f"AI backend: {await TextAnalyzer(db, http, cfg, secrets.anthropic_api_key).status()}")
     await http.aclose()
+    from desktop_notify import DesktopNotifier
+
+    desk = DesktopNotifier(bool(cfg["alerts"].get("desktop"))).backend()[1] if cfg["alerts"].get("desktop") else "off"
+    print(f"Desktop pop-ups: {desk}; click opens: {cfg['alerts'].get('buy_link') or 'DexScreener'}")
     print("Alert channels:",
           ", ".join(n for n, ok in (("discord", secrets.discord_webhook_url),
                                     ("telegram", secrets.telegram_bot_token and secrets.telegram_chat_id)) if ok)
@@ -172,6 +177,22 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
     pending = db.q1("SELECT COUNT(*) AS n FROM pending_checks WHERE done_at IS NULL")["n"]
     print(f"Paper trades open: {open_trades} | scheduled checks pending: {pending}")
     db.close()
+    return 0
+
+
+async def test_notify(cfg: dict) -> int:
+    from desktop_notify import DesktopNotifier, click_link
+
+    n = DesktopNotifier(True)
+    backend, status = n.backend()
+    print(f"Desktop notifications: {status}")
+    if not backend:
+        return 1
+    sample = "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU"
+    url = click_link("UNCONFIRMED", cfg["alerts"].get("buy_link"), "solana", sample,
+                     f"https://dexscreener.com/solana/{sample}")
+    await n.send("🟡 UNCONFIRMED TEST ($TEST)", "This is a test from corp-coin-watch. Click to open the link.", url)
+    print(f"Sent. Clicking it should open: {url}")
     return 0
 
 
@@ -207,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     lb.add_argument("--min-calls", type=int, default=1)
     sub.add_parser("backtest", help="backtest strategies on recorded outcomes")
     sub.add_parser("qualify", help="paper trading report card")
+    sub.add_parser("test-notify", help="send a sample desktop notification")
     sub.add_parser("x-login", help="register X burner accounts from .env")
     sub.add_parser("telegram-login", help="log in to Telegram (interactive, once)")
     args = p.parse_args(argv)
@@ -235,6 +257,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_qualify(cfg, db)
         finally:
             db.close()
+    if args.cmd == "test-notify":
+        return asyncio.run(test_notify(cfg))
     if args.cmd == "x-login":
         from sources.x_source import add_accounts_from_env
 

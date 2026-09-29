@@ -60,6 +60,20 @@ Everything is optional. Each source you leave out is simply skipped, and `python
 | **AI text analysis** | Set `text.backend` in `config.yaml` to `claude` (needs `ANTHROPIC_API_KEY`; defaults to the small, cheap `claude-haiku-4-5`) or `ollama` (free, local) |
 | **Fomo** | fomo.family has **no public API** (its app uses a private, login-gated backend). By default the bot uses the wallets in `fomo_wallets.yaml`. If you have a JSON endpoint you're allowed to use, set `fomo.leaderboard_url` / `fomo.theses_url` in `config.yaml` |
 
+### Desktop pop-ups (click to open the coin)
+
+With `alerts.desktop: true` (the default), each alert also pops up as a notification on your laptop.
+Where it appears is decided by your OS: bottom-right on Windows, top-right on macOS.
+
+- **Windows 10/11:** included in `pip install -r requirements.txt`.
+- **macOS:** also run `brew install terminal-notifier`. Without it you still get pop-ups, but you can't click through.
+- **Try it:** `python main.py test-notify`, then click the notification.
+
+Clicking a **VERIFIED / UNCONFIRMED** alert opens `alerts.buy_link` in `config.yaml`, e.g. your Fomo
+token page (use `{chain}` and `{address}` in the link). If that's empty, it opens DexScreener.
+**DANGER / UNCHECKED alerts never open a buy page**, only the chart. Exit warnings open the coin so you
+can sell. You still press buy or sell yourself; the bot never trades.
+
 Then list the accounts and wallets you care about. All of these files are optional:
 
 - `signals.yaml` – influential X accounts, **by numeric user ID**, with a tier (1 = mega public figures, 2 = top traders), a weight and optional known wallets. Also takes `force_include` / `force_block` lists.
@@ -79,7 +93,8 @@ python main.py health             # every source, each X account, requests this 
 python main.py leaderboard        # best and worst CA-posting X accounts
 python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
-python -m pytest                  # 157 tests
+python main.py test-notify        # send a sample desktop pop-up
+python -m pytest                  # 163 tests
 ```
 
 ## How a coin is judged

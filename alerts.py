@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config import Secrets
+from desktop_notify import BUYABLE, DesktopNotifier, buy_link, click_link
 from db import DB
 from net import Http
 from safety import FAIL, PASS, UNKNOWN, WARN, SafetyReport, _fmt_age, _usd
@@ -57,6 +58,7 @@ class AlertContent:
     source_url: str | None
     dex_url: str | None
     links: dict[str, list[str]] = field(default_factory=dict)
+    buy_url: str | None = None  # only ever set for VERIFIED / UNCONFIRMED
 
     @property
     def verdict(self) -> Verdict:
@@ -161,8 +163,25 @@ class AlertContent:
             out.append(f"Similar setups: {self.a.similar['text']}")
         return out
 
+    def desktop(self) -> tuple[str, str]:
+        """Short title + body for a desktop pop-up."""
+        m = self.safety.market or {}
+        bits = [self.chain]
+        if m.get("liquidity_usd") is not None:
+            bits.append(f"liq {_usd(m['liquidity_usd'])}")
+        if m.get("age_minutes") is not None:
+            bits.append(_fmt_age(m["age_minutes"]))
+        bits.append(f"backing {self.a.backing:+.1f}")
+        head = VERDICT_HEADLINE.get(self.verdict.label, self.verdict.label).split(" — ")[0]
+        body = " | ".join(bits)
+        if self.verdict.is_danger or self.verdict.label == UNCHECKED:
+            body = "DO NOT BUY. " + body + ". Click for the chart."
+        else:
+            body += ". Click to open " + ("the buy page." if self.buy_url else "the chart.")
+        return f"{head} {self.title}", body
+
     def link_lines(self) -> list[str]:
-        out = []
+        out = [f"Open to buy yourself: {self.buy_url}"] if self.buy_url else []
         for key, label in (("x", "X"), ("telegram", "Telegram"), ("website", "Website")):
             for url in (self.links.get(key) or [])[:2]:
                 out.append(f"{label}: {url}")
@@ -269,9 +288,15 @@ class Alerter:
         self.use_telegram = bool(
             acfg.get("telegram", True) and secrets.telegram_bot_token and secrets.telegram_chat_id
         ) and not console_only
-        if not console_only and not (self.use_discord or self.use_telegram):
-            log.warning("No alert channel configured (set DISCORD_WEBHOOK_URL and/or TELEGRAM_BOT_TOKEN+CHAT_ID); "
-                        "alerts will be printed to the console only")
+        self.buy_template = acfg.get("buy_link") or ""
+        self.desktop_kinds = set(acfg.get("desktop_on") or ["VERIFIED", "UNCONFIRMED", "DANGER", "UNCHECKED", "EXIT"])
+        self.desktop = DesktopNotifier(bool(acfg.get("desktop", False)) and not console_only)
+        if not console_only and not (self.use_discord or self.use_telegram or self.desktop.enabled):
+            log.warning("No alert channel configured (set DISCORD_WEBHOOK_URL and/or TELEGRAM_BOT_TOKEN+CHAT_ID, "
+                        "or alerts.desktop: true); alerts will be printed to the console only")
+
+    def buy_url_for(self, verdict_label: str, chain: str, address: str) -> str | None:
+        return buy_link(self.buy_template, chain, address) if verdict_label in BUYABLE else None
 
     def should_alert(self, chain: str, address: str, verdict_label: str) -> bool:
         return self.db.last_alert_verdict(chain, address) != verdict_label
@@ -280,7 +305,12 @@ class Alerter:
         if not self.should_alert(a.chain, a.address, a.verdict.label):
             log.info("skip alert %s:%s - verdict %s unchanged", a.chain, a.address, a.verdict.label)
             return False
-        sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a))
+        a.buy_url = self.buy_url_for(a.verdict.label, a.chain, a.address)
+        desk = None
+        if a.verdict.label in self.desktop_kinds:
+            title, body = a.desktop()
+            desk = (title, body, click_link(a.verdict.label, self.buy_template, a.chain, a.address, a.dex_url))
+        sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a), desk)
         if not sent:
             return False  # not recorded, so the next pass retries
         self.db.record_alert(a.chain, a.address, "verdict", a.verdict.label, sent,
@@ -290,7 +320,11 @@ class Alerter:
     async def send_exit_warning(self, chain: str, address: str, title: str, flags: list[tuple[str, str]],
                                 dex_url: str | None) -> bool:
         text, discord, tg = format_exit_warning(chain, address, title, flags, dex_url)
-        sent = await self._deliver(text, discord, tg)
+        desk = None
+        if "EXIT" in self.desktop_kinds:
+            desk = (f"⚠️ EXIT WARNING {title}", "; ".join(d for _, d in flags)[:200] + ". Click to open the coin.",
+                    click_link("EXIT", self.buy_template, chain, address, dex_url))
+        sent = await self._deliver(text, discord, tg, desk)
         if sent:
             self.db.record_alert(chain, address, "exit_warning", None, sent, {"flags": [f for f, _ in flags]})
         return bool(sent)
@@ -300,11 +334,14 @@ class Alerter:
         await self._deliver(text, {"content": _clip(text, 1900), "allowed_mentions": {"parse": []}}, html.escape(text))
         self.db.record_alert("-", "-", "system", None, [], {"message": message})
 
-    async def _deliver(self, text: str, discord_payload: dict, telegram_html: str) -> list[str]:
+    async def _deliver(self, text: str, discord_payload: dict, telegram_html: str,
+                       desktop: tuple[str, str, str | None] | None = None) -> list[str]:
         sent: list[str] = []
+        if desktop and await self.desktop.send(*desktop):
+            sent.append("desktop")
         if not (self.use_discord or self.use_telegram):
             print(text, flush=True)
-            return ["console"]
+            return sent + ["console"]
         if self.use_discord:
             r = await self.http.post_json(self.secrets.discord_webhook_url, discord_payload,
                                           expect_json=False, log_name="discord-webhook")

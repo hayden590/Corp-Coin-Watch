@@ -93,6 +93,12 @@ scoring:                                   # all weights
 alerts:
   discord: true
   telegram: true
+  # Desktop pop-ups on this computer. Clicking one opens the coin so YOU can decide.
+  desktop: true
+  desktop_on: [VERIFIED, UNCONFIRMED, DANGER, UNCHECKED, EXIT]   # drop DANGER/UNCHECKED for fewer pop-ups
+  # Page to open for VERIFIED/UNCONFIRMED coins, e.g. your Fomo token page.
+  # Use {chain} and {address}. Empty = DexScreener. DANGER/UNCHECKED never open this.
+  buy_link: ""
   min_backing_to_alert: 1.0                # only backing / official confirmation can trigger an alert
   danger_alert_sources: [x, telegram, fomo, manual]
   exit_warnings: true
