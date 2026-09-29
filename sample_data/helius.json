@@ -1,0 +1,51 @@
+{
+ "_comment": "Generated Helius enhanced-transaction samples. pools: synthetic swap txs (fee + Jito tip lamports). wallets: explicit swaps.",
+ "pools": {
+  "9TUYNnUzwyQnGfMyMAAarvK5qrqrYevPphXjcBEvsfqv": {
+   "n": 450,
+   "fee": 105000,
+   "tip": 50000000,
+   "tip_every": 2,
+   "span_minutes": 180
+  },
+  "3Ekf7UPQ9D4JJpJBFs9pfwGceULJk6Y6XJJdp5aN4PJS": {
+   "n": 500,
+   "fee": 90000,
+   "tip": 50000000,
+   "tip_every": 2,
+   "span_minutes": 90
+  },
+  "2v6AHqyE6fFGxjrpkdDvCs6mEmYENYwjJHX9sH2FNhn2": {
+   "n": 300,
+   "fee": 150000,
+   "tip": 20000000,
+   "tip_every": 2,
+   "span_minutes": 50
+  },
+  "9D4CPdM98tiS7xyMWvgkZrE6xy8bDMrCfgawj6jNRGvg": {
+   "n": 70,
+   "fee": 5000,
+   "tip": 0,
+   "tip_every": 0,
+   "span_minutes": 300
+  },
+  "ENBpa4jhiJjdt5ScwSPL5iyaq5NHGRn5ZoHwYxXEpSbx": {
+   "n": 500,
+   "fee": 5000,
+   "tip": 8000000,
+   "tip_every": 2,
+   "span_minutes": 600
+  }
+ },
+ "wallets": {
+  "7nvw5VToQS4K4ApicM3rDoL36xzo1dgcR1wfaeGmY6Uz": [
+   {
+    "mint": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU",
+    "side": "buy",
+    "minutes_ago": 50,
+    "amount": 1500000
+   }
+  ],
+  "GZBer48A1pvVaurjRooqhL7ygtJPzziFhMfRnnyvNAkC": []
+ }
+}

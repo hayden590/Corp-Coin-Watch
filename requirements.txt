@@ -1,8 +1,16 @@
-# Phase 1
+# Core
 httpx>=0.27,<1
 PyYAML>=6.0
 python-dotenv>=1.0
 base58>=2.1
+
+# Sources
+twscrape>=0.17          # X via burner accounts (no paid API)
+telethon>=1.36          # Telegram via your own account
+
+# Optional extras (the bot runs without them)
+anthropic>=1.0          # text analysis with the Claude API (text.backend: claude)
+scikit-learn>=1.4       # optional ML in the backtester
 
 # Dev / tests
 pytest>=8

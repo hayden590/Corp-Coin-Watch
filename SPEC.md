@@ -104,6 +104,21 @@ e) Narrative coin: token name matches a recent tier-1 tweet but no direct tier-1
   blacklist functions, holder concentration.
 - Compare to config thresholds. API failure = "unknown", never crash.
 
+### Global fees paid (Solana only)
+- For tokens that already passed the basic safety checks, calculate total fees
+  paid by traders: base fees + priority fees + Jito tips across the token's swap
+  transactions, using Helius (free tier). Cache, recalculate every few minutes max.
+- config.yaml filters:
+  - min_global_fees_sol (default 1.5): below this = "low activity", no alert.
+  - fees_to_volume ratio: high volume but very low fees for that volume = warning
+    "likely fake/wash volume" (threshold configurable).
+- Filter and warning signal only. Never overrides DANGER, never counts as proof
+  a coin is safe.
+- Show global fees paid and fees/volume ratio in alerts.
+- Log both into backtest snapshots so the backtester finds the best threshold
+  from real outcomes, and report it in `qualify`.
+- Tests with sample data for normal, low-activity, and wash-traded tokens.
+
 ## 8. Smart wallets (wallets.py)
 - Check whether smart wallets (manual, Fomo, and signal accounts' known wallets)
   hold or recently bought each CA. Helius free tier / public RPC for Solana,

@@ -1,0 +1,68 @@
+{
+ "coins": {
+  "HJ87zeJYVao2wAJGC4jhpaUY7QhBqjnVw5SoyBNdWRuY": {
+   "twitter": "https://x.com/bondcurve_fake",
+   "creator": "BondDev111111111111111111111111111111111111"
+  }
+ },
+ "created": {
+  "BondDev111111111111111111111111111111111111": [
+   {
+    "mint": "m0",
+    "complete": false
+   },
+   {
+    "mint": "m1",
+    "complete": false
+   },
+   {
+    "mint": "m2",
+    "complete": false
+   },
+   {
+    "mint": "m3",
+    "complete": false
+   },
+   {
+    "mint": "m4",
+    "complete": false
+   },
+   {
+    "mint": "m5",
+    "complete": false
+   },
+   {
+    "mint": "m6",
+    "complete": false
+   },
+   {
+    "mint": "m7",
+    "complete": false
+   },
+   {
+    "mint": "m8",
+    "complete": false
+   },
+   {
+    "mint": "m9",
+    "complete": false
+   },
+   {
+    "mint": "m10",
+    "complete": false
+   },
+   {
+    "mint": "m11",
+    "complete": false
+   },
+   {
+    "mint": "m12",
+    "complete": false
+   },
+   {
+    "mint": "m13",
+    "complete": false
+   }
+  ]
+ }
+}

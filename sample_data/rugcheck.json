@@ -1,40 +1,448 @@
 {
-  "_comment": "Keyed by mint. Missing mint = RugCheck returns 404 (simulates an API gap).",
-  "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU": {
-    "mint": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU",
-    "mintAuthority": null, "freezeAuthority": null,
-    "score": 1, "score_normalised": 1, "rugged": false,
-    "risks": [],
-    "markets": [{"pubkey": "9TUYNnUzwyQnGfMyMAAarvK5qrqrYevPphXjcBEvsfqv", "marketType": "raydium", "lp": {"lpLockedPct": 100}}],
-    "knownAccounts": {"G7mEf798dvBi7FcRuf9aq166batH2EKK5TWipcPtZS4D": {"name": "Raydium", "type": "AMM"}},
-    "topHolders": [
-      {"address": "h0", "owner": "G7mEf798dvBi7FcRuf9aq166batH2EKK5TWipcPtZS4D", "pct": 22.0},
-      {"address": "h1", "owner": "o1", "pct": 3.1}, {"address": "h2", "owner": "o2", "pct": 2.5},
-      {"address": "h3", "owner": "o3", "pct": 2.2}, {"address": "h4", "owner": "o4", "pct": 2.0},
-      {"address": "h5", "owner": "o5", "pct": 1.8}, {"address": "h6", "owner": "o6", "pct": 1.6},
-      {"address": "h7", "owner": "o7", "pct": 1.5}, {"address": "h8", "owner": "o8", "pct": 1.2},
-      {"address": "h9", "owner": "o9", "pct": 1.1}, {"address": "h10", "owner": "o10", "pct": 1.0}
-    ]
+ "_comment": "Keyed by mint. Missing mint = RugCheck returns 404 (simulates an API gap).",
+ "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU": {
+  "mint": "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU",
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "score": 1,
+  "score_normalised": 1,
+  "rugged": false,
+  "risks": [],
+  "markets": [
+   {
+    "pubkey": "9TUYNnUzwyQnGfMyMAAarvK5qrqrYevPphXjcBEvsfqv",
+    "marketType": "raydium",
+    "lp": {
+     "lpLockedPct": 100
+    }
+   }
+  ],
+  "knownAccounts": {
+   "G7mEf798dvBi7FcRuf9aq166batH2EKK5TWipcPtZS4D": {
+    "name": "Raydium",
+    "type": "AMM"
+   }
   },
-  "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93": {
-    "mint": "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93",
-    "token": {"mintAuthority": "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn", "freezeAuthority": null},
-    "score": 18500, "score_normalised": 72, "rugged": false,
-    "risks": [
-      {"name": "Mint Authority still enabled", "level": "danger", "score": 30000},
-      {"name": "Top 10 holders high ownership", "level": "danger", "score": 5000},
-      {"name": "Low amount of LP Providers", "level": "warn", "score": 400}
-    ],
-    "markets": [{"pubkey": "AWBhBAwfDChkjYSy8HfDsJGVKmP7Rjf1HPgSHKcnyHwr", "lp": {"lpLockedPct": 0}}],
-    "knownAccounts": {"DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn": {"name": "Creator", "type": "CREATOR"}},
-    "topHolders": [
-      {"address": "r1", "owner": "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn", "pct": 41.0, "insider": true},
-      {"address": "r2", "owner": "x2", "pct": 12.0, "insider": true},
-      {"address": "r3", "owner": "x3", "pct": 9.0}
-    ]
+  "topHolders": [
+   {
+    "address": "h0",
+    "owner": "G7mEf798dvBi7FcRuf9aq166batH2EKK5TWipcPtZS4D",
+    "pct": 22.0
+   },
+   {
+    "address": "h1",
+    "owner": "o1",
+    "pct": 3.1
+   },
+   {
+    "address": "h2",
+    "owner": "o2",
+    "pct": 2.5
+   },
+   {
+    "address": "h3",
+    "owner": "o3",
+    "pct": 2.2
+   },
+   {
+    "address": "h4",
+    "owner": "o4",
+    "pct": 2.0
+   },
+   {
+    "address": "h5",
+    "owner": "o5",
+    "pct": 1.8
+   },
+   {
+    "address": "h6",
+    "owner": "o6",
+    "pct": 1.6
+   },
+   {
+    "address": "h7",
+    "owner": "o7",
+    "pct": 1.5
+   },
+   {
+    "address": "h8",
+    "owner": "o8",
+    "pct": 1.2
+   },
+   {
+    "address": "h9",
+    "owner": "o9",
+    "pct": 1.1
+   },
+   {
+    "address": "h10",
+    "owner": "o10",
+    "pct": 1.0
+   }
+  ],
+  "creator": "GZBer48A1pvVaurjRooqhL7ygtJPzziFhMfRnnyvNAkC",
+  "totalHolders": 2400
+ },
+ "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93": {
+  "mint": "3625ZKNaXCo69UiVyyzUpkDaEXeZMV68nCdbjouxYN93",
+  "token": {
+   "mintAuthority": "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn",
+   "freezeAuthority": null
   },
-  "755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk": {
-    "mintAuthority": null, "freezeAuthority": null, "risks": [{"name": "Low Liquidity", "level": "danger"}],
-    "markets": [], "topHolders": [{"address": "f1", "owner": "fo1", "pct": 8.0}]
-  }
+  "score": 18500,
+  "score_normalised": 72,
+  "rugged": false,
+  "risks": [
+   {
+    "name": "Mint Authority still enabled",
+    "level": "danger",
+    "score": 30000
+   },
+   {
+    "name": "Top 10 holders high ownership",
+    "level": "danger",
+    "score": 5000
+   },
+   {
+    "name": "Low amount of LP Providers",
+    "level": "warn",
+    "score": 400
+   }
+  ],
+  "markets": [
+   {
+    "pubkey": "AWBhBAwfDChkjYSy8HfDsJGVKmP7Rjf1HPgSHKcnyHwr",
+    "lp": {
+     "lpLockedPct": 0
+    }
+   }
+  ],
+  "knownAccounts": {
+   "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn": {
+    "name": "Creator",
+    "type": "CREATOR"
+   }
+  },
+  "topHolders": [
+   {
+    "address": "r1",
+    "owner": "DgX9xEoN7RZGWevFVCy13JuzKsnmAx9B3VLfvoJxwqKn",
+    "pct": 41.0,
+    "insider": true
+   },
+   {
+    "address": "r2",
+    "owner": "x2",
+    "pct": 12.0,
+    "insider": true
+   },
+   {
+    "address": "r3",
+    "owner": "x3",
+    "pct": 9.0
+   }
+  ]
+ },
+ "755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk": {
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "risks": [
+   {
+    "name": "Low Liquidity",
+    "level": "danger"
+   }
+  ],
+  "markets": [],
+  "topHolders": [
+   {
+    "address": "f1",
+    "owner": "fo1",
+    "pct": 8.0
+   }
+  ]
+ },
+ "HafYv3yF1dvTeGm8hmf97cwiEktdWaXKZ7m9PpNBYm5C": {
+  "mint": "HafYv3yF1dvTeGm8hmf97cwiEktdWaXKZ7m9PpNBYm5C",
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "score": 1,
+  "score_normalised": 1,
+  "rugged": false,
+  "risks": [],
+  "markets": [
+   {
+    "pubkey": "3Ekf7UPQ9D4JJpJBFs9pfwGceULJk6Y6XJJdp5aN4PJS",
+    "lp": {
+     "lpLockedPct": 100
+    }
+   }
+  ],
+  "knownAccounts": {},
+  "totalHolders": 1500,
+  "topHolders": [
+   {
+    "address": "HafYh0",
+    "owner": "HafYo0",
+    "pct": 4
+   },
+   {
+    "address": "HafYh1",
+    "owner": "HafYo1",
+    "pct": 3
+   },
+   {
+    "address": "HafYh2",
+    "owner": "HafYo2",
+    "pct": 2.5
+   },
+   {
+    "address": "HafYh3",
+    "owner": "HafYo3",
+    "pct": 2
+   },
+   {
+    "address": "HafYh4",
+    "owner": "HafYo4",
+    "pct": 2
+   },
+   {
+    "address": "HafYh5",
+    "owner": "HafYo5",
+    "pct": 1.5
+   },
+   {
+    "address": "HafYh6",
+    "owner": "HafYo6",
+    "pct": 1.5
+   },
+   {
+    "address": "HafYh7",
+    "owner": "HafYo7",
+    "pct": 1
+   },
+   {
+    "address": "HafYh8",
+    "owner": "HafYo8",
+    "pct": 1
+   },
+   {
+    "address": "HafYh9",
+    "owner": "HafYo9",
+    "pct": 1
+   }
+  ]
+ },
+ "8sdgXWyyzXXhEBhpLvqBbKrxJbGzVYkx6RB5Xpss69uM": {
+  "mint": "8sdgXWyyzXXhEBhpLvqBbKrxJbGzVYkx6RB5Xpss69uM",
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "score": 1,
+  "score_normalised": 1,
+  "rugged": false,
+  "risks": [],
+  "markets": [
+   {
+    "pubkey": "2v6AHqyE6fFGxjrpkdDvCs6mEmYENYwjJHX9sH2FNhn2",
+    "lp": {
+     "lpLockedPct": 100
+    }
+   }
+  ],
+  "knownAccounts": {},
+  "totalHolders": 1500,
+  "topHolders": [
+   {
+    "address": "8sdgh0",
+    "owner": "8sdgo0",
+    "pct": 4
+   },
+   {
+    "address": "8sdgh1",
+    "owner": "8sdgo1",
+    "pct": 3
+   },
+   {
+    "address": "8sdgh2",
+    "owner": "8sdgo2",
+    "pct": 2.5
+   },
+   {
+    "address": "8sdgh3",
+    "owner": "8sdgo3",
+    "pct": 2
+   },
+   {
+    "address": "8sdgh4",
+    "owner": "8sdgo4",
+    "pct": 2
+   },
+   {
+    "address": "8sdgh5",
+    "owner": "8sdgo5",
+    "pct": 1.5
+   },
+   {
+    "address": "8sdgh6",
+    "owner": "8sdgo6",
+    "pct": 1.5
+   },
+   {
+    "address": "8sdgh7",
+    "owner": "8sdgo7",
+    "pct": 1
+   },
+   {
+    "address": "8sdgh8",
+    "owner": "8sdgo8",
+    "pct": 1
+   },
+   {
+    "address": "8sdgh9",
+    "owner": "8sdgo9",
+    "pct": 1
+   }
+  ]
+ },
+ "H3NvFCJsjLLZ6jyTbJkYv8ezeB77pnNUj3jAGXYstg7C": {
+  "mint": "H3NvFCJsjLLZ6jyTbJkYv8ezeB77pnNUj3jAGXYstg7C",
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "score": 1,
+  "score_normalised": 1,
+  "rugged": false,
+  "risks": [],
+  "markets": [
+   {
+    "pubkey": "9D4CPdM98tiS7xyMWvgkZrE6xy8bDMrCfgawj6jNRGvg",
+    "lp": {
+     "lpLockedPct": 100
+    }
+   }
+  ],
+  "knownAccounts": {},
+  "totalHolders": 1500,
+  "topHolders": [
+   {
+    "address": "H3Nvh0",
+    "owner": "H3Nvo0",
+    "pct": 4
+   },
+   {
+    "address": "H3Nvh1",
+    "owner": "H3Nvo1",
+    "pct": 3
+   },
+   {
+    "address": "H3Nvh2",
+    "owner": "H3Nvo2",
+    "pct": 2.5
+   },
+   {
+    "address": "H3Nvh3",
+    "owner": "H3Nvo3",
+    "pct": 2
+   },
+   {
+    "address": "H3Nvh4",
+    "owner": "H3Nvo4",
+    "pct": 2
+   },
+   {
+    "address": "H3Nvh5",
+    "owner": "H3Nvo5",
+    "pct": 1.5
+   },
+   {
+    "address": "H3Nvh6",
+    "owner": "H3Nvo6",
+    "pct": 1.5
+   },
+   {
+    "address": "H3Nvh7",
+    "owner": "H3Nvo7",
+    "pct": 1
+   },
+   {
+    "address": "H3Nvh8",
+    "owner": "H3Nvo8",
+    "pct": 1
+   },
+   {
+    "address": "H3Nvh9",
+    "owner": "H3Nvo9",
+    "pct": 1
+   }
+  ]
+ },
+ "5omKecUNod2eU1r3Yxw7juEz9iz76EHHv69FipY5979g": {
+  "mint": "5omKecUNod2eU1r3Yxw7juEz9iz76EHHv69FipY5979g",
+  "mintAuthority": null,
+  "freezeAuthority": null,
+  "score": 1,
+  "score_normalised": 1,
+  "rugged": false,
+  "risks": [],
+  "markets": [
+   {
+    "pubkey": "ENBpa4jhiJjdt5ScwSPL5iyaq5NHGRn5ZoHwYxXEpSbx",
+    "lp": {
+     "lpLockedPct": 100
+    }
+   }
+  ],
+  "knownAccounts": {},
+  "totalHolders": 1500,
+  "topHolders": [
+   {
+    "address": "5omKh0",
+    "owner": "5omKo0",
+    "pct": 4
+   },
+   {
+    "address": "5omKh1",
+    "owner": "5omKo1",
+    "pct": 3
+   },
+   {
+    "address": "5omKh2",
+    "owner": "5omKo2",
+    "pct": 2.5
+   },
+   {
+    "address": "5omKh3",
+    "owner": "5omKo3",
+    "pct": 2
+   },
+   {
+    "address": "5omKh4",
+    "owner": "5omKo4",
+    "pct": 2
+   },
+   {
+    "address": "5omKh5",
+    "owner": "5omKo5",
+    "pct": 1.5
+   },
+   {
+    "address": "5omKh6",
+    "owner": "5omKo6",
+    "pct": 1.5
+   },
+   {
+    "address": "5omKh7",
+    "owner": "5omKo7",
+    "pct": 1
+   },
+   {
+    "address": "5omKh8",
+    "owner": "5omKo8",
+    "pct": 1
+   },
+   {
+    "address": "5omKh9",
+    "owner": "5omKo9",
+    "pct": 1
+   }
+  ]
+ }
 }

@@ -1,0 +1,5 @@
+{
+ "https://corp.example/": "<html><body>Corp Inc - products</body></html>",
+ "https://corp.example/token": "<html><body><h1>CorpCoin</h1><p>Official contract: HafYv3yF1dvTeGm8hmf97cwiEktdWaXKZ7m9PpNBYm5C</p></body></html>",
+ "https://goodcat.example/": "<html><body>GoodCat. CA 6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU</body></html>"
+}

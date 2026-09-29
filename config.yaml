@@ -1,43 +1,140 @@
-# corp-coin-watch config. Every value here is optional: anything missing falls
-# back to the defaults in config.py. Delete a line to use the default.
+# corp-coin-watch config. Every value is optional: delete a line and the
+# built-in default from config.py is used.
 
-# Chains to watch (DexScreener chain IDs).
-chains: [solana, ethereum, base, bsc]
+chains: [solana, ethereum, base, bsc]      # DexScreener chain IDs
 
 poll:
-  dexscreener_seconds: 90     # token-profile feed poll interval
-  jitter_pct: 20              # randomise intervals by +/- this percent
+  dexscreener_seconds: 90
+  x_search_min_seconds: 180                # X search sweeps: random 3-5 min
+  x_search_max_seconds: 300
+  x_watch_seconds: 240                     # watched accounts (by user ID)
+  monitor_seconds: 300                     # follow-ups on alerted coins + paper trades
+  slow_minutes: 20                         # wallets, social graph, discovery rules
+  fomo_hours: 6
+  jitter_pct: 20
 
 safety:
   min_liquidity_usd: 10000
-  max_top10_holder_pct: 30    # excluding LP / bonding curve / burn / locker accounts
+  max_top10_holder_pct: 30                 # excluding LP / bonding curve / burn / lockers
   max_buy_tax_pct: 10
   max_sell_tax_pct: 10
-  min_lp_locked_pct: 80       # below this = warning (not fail)
-  warn_pair_age_minutes: 10   # pairs younger than this get a warning
-  recheck_minutes: 30         # cache safety results this long
+  min_lp_locked_pct: 80                    # below = warning
+  warn_pair_age_minutes: 10
+  recheck_minutes: 30
+
+# Global fees paid (Solana only, needs HELIUS_API_KEY). Filter/warning only -
+# never overrides DANGER, never proof of safety. `backtest` reports the best
+# thresholds from real outcomes; `qualify` shows them too.
+fees:
+  min_global_fees_sol: 1.5                 # below = "low activity", no alert
+  min_fees_to_volume: 0.001                # fees USD / volume USD below this (0.1%)...
+  wash_min_volume_usd: 20000               # ...on at least this much volume = "likely wash volume"
+  max_pages: 5                             # Helius pages of 100 swaps per check
+  recheck_minutes: 5
+
+x:
+  queries: ["pump.fun", "dexscreener.com", "CA:", "contract address"]
+  requests_per_hour: 150                   # hourly budget across all burner accounts
+  no_account_cooldown_minutes: 15
+
+verify:
+  persistence_delay_minutes: 15            # re-fetch source tweet after this long
+  integrity_window_hours: 72               # profile changes inside this window = red flag
+  narrative_window_hours: 48
+
+discovery:                                 # auto-promotion to tier 2 / auto-blacklist
+  promote_min_calls: 5
+  promote_min_good_pct: 40
+  promote_max_rug_pct: 20
+  blacklist_min_calls: 3
+  blacklist_min_rug_pct: 50
+
+wallets:
+  min_history: 10                          # resolved trades before a wallet affects scoring
+  dump_window_minutes: 60                  # signal account's wallet sells within this after posting = DANGER
+
+graph:
+  tier1_refresh_days: 3
+  tier2_refresh_days: 7
+  hijack_is_danger: true                   # spec: hijacked-account flag => DANGER
+
+text:
+  backend: none                            # none | claude | ollama
+  claude_model: claude-haiku-4-5           # small/cheap model (needs ANTHROPIC_API_KEY)
+  ollama_url: http://localhost:11434
+  ollama_model: llama3.1:8b
+
+fomo:
+  # fomo.family has no public API. Point these at a JSON endpoint you're
+  # allowed to use (FOMO_API_KEY in .env); otherwise fomo_wallets.yaml is used.
+  leaderboard_url: ""
+  theses_url: ""                           # use {address} as placeholder
+
+scoring:                                   # all weights
+  tier1_weight: 3.0                        # tier-1 DIRECT engagement with the CA only
+  tier2_weight: 1.5
+  promoted_weight: 1.0
+  channel_weight: 1.0                      # per distinct Telegram channel (x its channels.yaml weight)
+  x_poster_weight: 0.2
+  x_poster_cap: 1.0
+  blacklisted_penalty: -1.0
+  smart_wallet_weight: 1.0                 # x wallet track-record multiplier
+  tier1_interaction: 2.0                   # decays with age (recency_days)
+  tier2_interaction: 0.5
+  tier1_follow: 0.5
+  tier2_follow: 0.1
+  recency_days: 30
+  connection_weight: 1.0
+  chart_weight: 1.0
+  text_weight: 0.5
+  narrative_penalty: -1.0
+  deployer_penalty: -1.0
 
 alerts:
-  discord: true               # needs DISCORD_WEBHOOK_URL
-  telegram: true              # needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
-  # DANGER coins from these sources get a "DO NOT BUY" alert. Coins that only
-  # showed up in the DexScreener feed and fail safety are logged, not alerted.
+  discord: true
+  telegram: true
+  min_backing_to_alert: 1.0                # only backing / official confirmation can trigger an alert
   danger_alert_sources: [x, telegram, fomo, manual]
-  # Send "source down" alerts after this many consecutive failures.
+  exit_warnings: true
+  monitor_hours: 48
   source_down_after_failures: 5
 
-# Requests per minute per API host (be polite; stay under published limits).
-rate_limits:
-  api.dexscreener.com: 50
-  api.rugcheck.xyz: 30
-  api.gopluslabs.io: 20
-  discord.com: 20
-  api.telegram.org: 20
+backtest:
+  take_profit_pct: 50                      # label: hits +50% before -30%
+  stop_loss_pct: 30
+  fee_pct: 1.0                             # per side
+  slippage_pct: 2.0                        # per side
+  train_frac: 0.7                          # time split: oldest 70% train, newest 30% test
+
+# Strategies are backtested AND paper traded (fake money only).
+strategies:
+  - name: backed
+    min_verdict: UNCONFIRMED
+    min_backing: 1.5
+    take_profit_pct: 50
+    stop_loss_pct: 30
+    max_hold_hours: 24
+    exit_on_flags: true
+  - name: verified_only
+    min_verdict: VERIFIED
+    take_profit_pct: 100
+    stop_loss_pct: 35
+    max_hold_hours: 24
+    exit_on_flags: true
+  # Other rule keys: min_total, max_top10_pct, min_liquidity_usd, min_global_fees_sol,
+  # min_fees_to_volume, min_chart_quality, min_trusted_smart_buys, min_ml_prob
+
+paper:
+  stake: 50                                # fake dollars per paper trade
+
+qualify:
+  min_trades: 100
+  min_days: 21
+  min_ev_pct: 0.0                          # expected value per trade after fees must beat this
+  max_drawdown_pct: 30
 
 logging:
   level: INFO
   file: logs/corp-coin-watch.log
-  max_bytes: 5000000
-  backups: 5
 
 db_path: data/corp-coin-watch.db

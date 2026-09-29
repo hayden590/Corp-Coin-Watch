@@ -1,24 +1,90 @@
 {
-  "_comment": "Keyed by lowercase contract address; mirrors GoPlus `result` entries (string flags, fractional taxes/percents).",
-  "0xa55e2e3846a51f6ad0abfdfbdea2ba0e5e0c76b5": {
-    "is_honeypot": "1", "cannot_sell_all": "1", "buy_tax": "0", "sell_tax": "0.99",
-    "is_mintable": "1", "is_proxy": "0", "is_blacklisted": "1", "is_open_source": "1",
-    "owner_change_balance": "0", "hidden_owner": "0",
-    "holders": [
-      {"address": "0x70ab1822ef1bd3d694d5ca5d3c051797b8f804cd", "percent": "0.60", "is_locked": 0},
-      {"address": "0x1111111111111111111111111111111111111111", "percent": "0.20", "is_locked": 0}
-    ]
-  },
-  "0x74fa5327cc0f4e947789dd5e989a61a8242986a5": {
-    "is_honeypot": "0", "cannot_sell_all": "0", "buy_tax": "0", "sell_tax": "0.01",
-    "is_mintable": "0", "is_proxy": "0", "is_blacklisted": "0", "is_open_source": "1",
-    "owner_change_balance": "0", "hidden_owner": "0", "transfer_pausable": "0",
-    "holders": [
-      {"address": "0x1c754defd932f94bdffd3a9a3f53cb56ac89770f", "percent": "0.35", "is_locked": 0},
-      {"address": "0x000000000000000000000000000000000000dead", "percent": "0.10", "is_locked": 0},
-      {"address": "0xd8834ed84bca7e4ecd26ae8cf38937ad546ad53a", "percent": "0.04", "is_locked": 0},
-      {"address": "0x2222222222222222222222222222222222222222", "percent": "0.03", "is_locked": 0},
-      {"address": "0x3333333333333333333333333333333333333333", "percent": "0.02", "is_locked": 1}
-    ]
-  }
+ "_comment": "Keyed by lowercase contract address; mirrors GoPlus `result` entries (string flags, fractional taxes/percents).",
+ "0xa55e2e3846a51f6ad0abfdfbdea2ba0e5e0c76b5": {
+  "is_honeypot": "1",
+  "cannot_sell_all": "1",
+  "buy_tax": "0",
+  "sell_tax": "0.99",
+  "is_mintable": "1",
+  "is_proxy": "0",
+  "is_blacklisted": "1",
+  "is_open_source": "1",
+  "owner_change_balance": "0",
+  "hidden_owner": "0",
+  "holders": [
+   {
+    "address": "0x70ab1822ef1bd3d694d5ca5d3c051797b8f804cd",
+    "percent": "0.60",
+    "is_locked": 0
+   },
+   {
+    "address": "0x1111111111111111111111111111111111111111",
+    "percent": "0.20",
+    "is_locked": 0
+   }
+  ]
+ },
+ "0x74fa5327cc0f4e947789dd5e989a61a8242986a5": {
+  "is_honeypot": "0",
+  "cannot_sell_all": "0",
+  "buy_tax": "0",
+  "sell_tax": "0.01",
+  "is_mintable": "0",
+  "is_proxy": "0",
+  "is_blacklisted": "0",
+  "is_open_source": "1",
+  "owner_change_balance": "0",
+  "hidden_owner": "0",
+  "transfer_pausable": "0",
+  "holders": [
+   {
+    "address": "0x1c754defd932f94bdffd3a9a3f53cb56ac89770f",
+    "percent": "0.35",
+    "is_locked": 0
+   },
+   {
+    "address": "0x000000000000000000000000000000000000dead",
+    "percent": "0.10",
+    "is_locked": 0
+   },
+   {
+    "address": "0xd8834ed84bca7e4ecd26ae8cf38937ad546ad53a",
+    "percent": "0.04",
+    "is_locked": 0
+   },
+   {
+    "address": "0x2222222222222222222222222222222222222222",
+    "percent": "0.03",
+    "is_locked": 0
+   },
+   {
+    "address": "0x3333333333333333333333333333333333333333",
+    "percent": "0.02",
+    "is_locked": 1
+   }
+  ]
+ },
+ "0xfe3b29e33b1222bbea4ec1f7e8fba0fd78c266f2": {
+  "is_honeypot": "0",
+  "cannot_sell_all": "0",
+  "buy_tax": "0",
+  "sell_tax": "0",
+  "is_mintable": "0",
+  "is_proxy": "0",
+  "is_blacklisted": "0",
+  "is_open_source": "1",
+  "owner_change_balance": "0",
+  "hidden_owner": "0",
+  "holder_count": "800",
+  "holders": [
+   {
+    "address": "0x1ce6c1826e725f991123d5d8b5272eadb448f837",
+    "percent": "0.4"
+   },
+   {
+    "address": "0x4444444444444444444444444444444444444444",
+    "percent": "0.06"
+   }
+  ]
+ }
 }

@@ -11,12 +11,13 @@ from tests.helpers import cfg, run
 
 def make_pipe(transport=None):
     db = DB()
-    http = Http({h: 100_000 for h in cfg()["rate_limits"]}, transport=transport or SampleTransport(), base_backoff=0.001)
+    http = Http({}, transport=transport or SampleTransport(), base_backoff=0.001, default_per_minute=100_000)
     return Pipeline(cfg(), db, http, Secrets(), console_only=True), db
 
 
 def test_dry_run_end_to_end(capsys):
-    assert run(main.run_dry(cfg())) == 0
+    from dryrun import run_dry
+    assert run(run_dry(cfg())) == 0
     out = capsys.readouterr().out
     assert "DO NOT BUY" in out
     assert "HoneyPot Inu" in out and "SafeFrog" in out

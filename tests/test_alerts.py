@@ -7,7 +7,7 @@ from alerts import AlertContent, Alerter, format_discord, format_telegram, forma
 from config import SecretRedactor, Secrets
 from db import DB
 from safety import FAIL, PASS, SafetyReport
-from scoring import DANGER, UNCONFIRMED, Verdict
+from scoring import DANGER, UNCONFIRMED, Assessment, Verdict
 from tests.helpers import cfg, http_with, run
 
 
@@ -16,8 +16,9 @@ def content(label=UNCONFIRMED, name="Cat", reasons=None):
     r.add("liquidity", PASS, "$50.0K")
     if label == DANGER:
         r.add("honeypot", FAIL, "cannot sell")
-    return AlertContent(Verdict(label, reasons or ["x"]), "solana", "A", name, "CAT", r,
-                        "x", "https://x.com/a/status/1", "https://dexscreener.com/solana/p",
+    a = Assessment("solana", "A", r)
+    a.verdict = Verdict(label, reasons or ["x"])
+    return AlertContent(a, name, "CAT", "x", "https://x.com/a/status/1", "https://dexscreener.com/solana/p",
                         {"x": ["https://x.com/cat"]})
 
 

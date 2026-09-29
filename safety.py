@@ -56,6 +56,8 @@ class SafetyReport:
     checks: list[Check] = field(default_factory=list)
     top10_pct: float | None = None
     market: dict[str, Any] | None = None
+    deployer: str | None = None
+    holder_count: int | None = None
 
     def add(self, name: str, status: str, detail: str = "") -> None:
         self.checks.append(Check(name, status, detail))
@@ -86,7 +88,8 @@ class SafetyReport:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SafetyReport":
-        r = cls(d["chain"], d["address"], top10_pct=d.get("top10_pct"), market=d.get("market"))
+        r = cls(d["chain"], d["address"], top10_pct=d.get("top10_pct"), market=d.get("market"),
+                deployer=d.get("deployer"), holder_count=d.get("holder_count"))
         r.checks = [Check(**c) for c in d.get("checks") or []]
         return r
 
@@ -153,6 +156,9 @@ def apply_rugcheck(report: SafetyReport, data: dict | None, th: dict, dex_id: st
         return
 
     token = data.get("token") or {}
+    report.deployer = data.get("creator") or report.deployer
+    hc = data.get("totalHolders") or data.get("holderCount")
+    report.holder_count = int(hc) if isinstance(hc, (int, float)) else report.holder_count
     for key, name in (("mintAuthority", "mint_authority"), ("freezeAuthority", "freeze_authority")):
         if key in data or key in token:
             val = data.get(key, token.get(key))
@@ -214,6 +220,10 @@ def apply_goplus(report: SafetyReport, data: dict | None, th: dict, pair_address
         for n in names:
             report.add(n, UNKNOWN, "GoPlus unavailable or token not indexed yet")
         return
+
+    report.deployer = (data.get("creator_address") or "").lower() or report.deployer
+    hc = _f(data.get("holder_count"))
+    report.holder_count = int(hc) if hc is not None else report.holder_count
 
     def flag(key: str) -> bool | None:
         v = data.get(key)

@@ -18,7 +18,7 @@ def cfg(**overrides):
 
 
 def http_with(handler, db: DB | None = None) -> Http:
-    h = Http({}, transport=httpx.MockTransport(handler), base_backoff=0.001,
+    h = Http({}, transport=httpx.MockTransport(handler), base_backoff=0.001, default_per_minute=100_000,
              on_request=(lambda host: db.count_request(host)) if db else None)
     for host in ("api.dexscreener.com", "api.rugcheck.xyz", "api.gopluslabs.io", "discord.com", "api.telegram.org"):
         h._limits[host] = 100_000

@@ -1,152 +1,191 @@
 # corp-coin-watch
 
-Finds new meme-coin contract addresses (CAs), checks whether they're safe and
-legit, and alerts you on Discord and/or Telegram.
+Finds new meme-coin contract addresses (CAs) on X, Telegram, DexScreener and
+Fomo. It checks whether each coin is safe and legit, analyses the chart,
+on-chain activity, social connections and chatter, scores it, and alerts you
+on Discord and/or Telegram. It records what actually happened to every coin,
+backtests and paper-trades strategies, and tells you plainly whether it has an
+edge.
 
 > **This bot never buys or sells anything.** It has no wallet keys, no signing
-> code, and no trading path, and a test fails the build if trading code ever
-> shows up. Alerts and paper trading only. Nothing it says is financial advice.
+> code and no trading path, and a test fails the build if that kind of code ever
+> appears. Alerts and paper trading (fake money) only. Nothing it says is
+> financial advice.
 
-The full design is in [SPEC.md](SPEC.md). It's being built in 7 phases.
+The full design is in [SPEC.md](SPEC.md). All 7 phases are built.
 
-## Status
-
-| Phase | What | State |
-|---|---|---|
-| 1 | Setup, DB, CA extraction, DexScreener source, safety checks, alerts, dry-run | ✅ done |
-| 2 | Telegram source, legitimacy checks, full scoring/verdicts | not started |
-| 3 | X source (twscrape), auto-discovery, endorsements | not started |
-| 4 | Smart wallets, Fomo source | not started |
-| 5 | Connections analysis | not started |
-| 6 | Charts, exit warnings, text analysis | not started |
-| 7 | Outcome tracking, backtesting, paper trading, `qualify` | not started |
-
-## Setup
+## Quick start
 
 Requires Python 3.11+.
 
 ```bash
-git clone <this repo> && cd Corp-Coin-Watch
 python3 -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+source .venv/bin/activate             # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                 # then fill in what you have
+cp .env.example .env                  # fill in what you have; everything is optional
+
+python main.py --dry-run              # see the whole thing work on sample data first
 ```
 
-Try it with no keys and no network:
+The dry run needs no keys and no network. It walks through a scripted story:
 
-```bash
-python main.py --dry-run
-```
+- **Step 1** – coins arrive from DexScreener, X and Telegram and get alerts:
+  - a good coin backed by a trader
+  - an official company coin
+  - a honeypot
+  - a mint-authority rug
+  - a signal account that just changed its name
+  - a "narrative" coin riding a celebrity tweet, with a prompt-injection attempt in the chatter
+  - a low-activity coin (filtered) and a wash-traded coin (warned)
+  - a pump.fun coin whose safety data is missing
+- **Step 2** – 15 minutes later, source tweets are re-fetched. The official coin
+  becomes **VERIFIED**; the signal account's deleted tweet is caught.
+- **Step 3** – liquidity is pulled on an alerted coin, so an **EXIT WARNING**
+  fires and the paper trade closes.
+- **Step 4** – `backtest` and `qualify` reports on *synthetic* history, just so
+  you can see what they look like.
 
-That runs the whole pipeline on the fake tokens in `sample_data/` (a good coin,
-a rug, a honeypot, a pump.fun coin whose safety data is missing, a wallet
-address that isn't a token, and so on) and prints the alerts it would send.
+## Setting up the real sources
 
-### Alert channels (`.env`)
+Everything is optional. Each source you leave out is simply skipped, and `python main.py health` shows what's on.
 
-- **Discord:** Server Settings → Integrations → Webhooks → New Webhook → copy
-  the URL into `DISCORD_WEBHOOK_URL`.
-- **Telegram:** message [@BotFather](https://t.me/BotFather) and send `/newbot`,
-  then put the token in `TELEGRAM_BOT_TOKEN`. Send your bot one message, then open
-  `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` into
-  `TELEGRAM_CHAT_ID`.
+| What | How |
+|---|---|
+| **Discord alerts** | Server Settings → Integrations → Webhooks → New Webhook → `DISCORD_WEBHOOK_URL` |
+| **Telegram alerts** | [@BotFather](https://t.me/BotFather) `/newbot` → `TELEGRAM_BOT_TOKEN`. Message your bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates`, copy `chat.id` → `TELEGRAM_CHAT_ID` |
+| **Telegram channels (reading)** | https://my.telegram.org → API tools → `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`. List channels in `channels.yaml`, then run `python main.py telegram-login` once (asks for your phone + code; the session is saved in `data/`) |
+| **X** | Use **burner accounts only**. Put them in `.env` as `X_ACCOUNTS=user:pass:email:email_pass;...` or `X_COOKIES=user=cookie_string;...`, then run `python main.py x-login` |
+| **Solana wallets + global fees** | Free Helius key → `HELIUS_API_KEY` |
+| **EVM wallets** | Ethereum/Base work with no key (Blockscout). BSC etc. need a free `ETHERSCAN_API_KEY` |
+| **AI text analysis** | Set `text.backend` in `config.yaml` to `claude` (needs `ANTHROPIC_API_KEY`; defaults to the small, cheap `claude-haiku-4-5`) or `ollama` (free, local) |
+| **Fomo** | fomo.family has **no public API** (its app uses a private, login-gated backend). By default the bot uses the wallets in `fomo_wallets.yaml`. If you have a JSON endpoint you're allowed to use, set `fomo.leaderboard_url` / `fomo.theses_url` in `config.yaml` |
 
-If neither channel is set, alerts go to the console.
+Then list the accounts and wallets you care about. All of these files are optional:
 
-Never commit `.env`. Secrets are kept out of the logs: the log output is
-scrubbed of any secret value, and httpx URL logging is switched off because the
-Telegram bot token is part of the URL.
+- `signals.yaml` – influential X accounts, **by numeric user ID**, with a tier (1 = mega public figures, 2 = top traders), a weight and optional known wallets. Also takes `force_include` / `force_block` lists.
+- `accounts.yaml` – official org accounts and their domains.
+- `channels.yaml` – Telegram channels, with a label and weight.
+- `smart_wallets.yaml`, `fomo_wallets.yaml` – wallets to track.
+
+Get an account's user ID from its profile via any "X user ID lookup" site. The bot never matches on display names.
 
 ## Commands
 
 ```bash
-python main.py                    # run the live watcher (polls DexScreener)
+python main.py                    # run everything (Ctrl+C to stop)
 python main.py --dry-run          # full pipeline on sample data
-python main.py check "<text>"     # check any CA / tweet text / link right now (console only)
-python main.py check "<text>" --send   # ...and send the alert
-python main.py health             # source status, requests this hour, last success
-python -m pytest                  # run the tests
+python main.py check "<text>"     # check a CA / tweet / link right now (add --send to alert)
+python main.py health             # every source, each X account, requests this hour, AI backend
+python main.py leaderboard        # best and worst CA-posting X accounts
+python main.py backtest           # replay strategies on recorded history
+python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
+python -m pytest                  # 156 tests
 ```
 
-## How phase 1 works
+## How a coin is judged
 
-1. **Sources.** The DexScreener token-profile feed is polled about every 90s,
-   with some random jitter. The `check` command takes pasted text as a manual source.
-2. **Extraction** (`extract.py`) finds these formats:
-   - EVM `0x` + 40 hex
-   - Solana base58 strings of 32–44 chars that decode to 32 bytes
-   - links from dexscreener, pump.fun, birdeye, etherscan, basescan, bscscan and solscan
+1. **Found.** CAs are pulled from text and from links (DexScreener, pump.fun,
+   Birdeye, Etherscan-family, Solscan). The extractor handles EVM `0x`+40 hex and
+   Solana base58 that decodes to 32 bytes, and ignores tx hashes, quote tokens and
+   zero-width tricks. Every sighting is stored with its source and first-seen time.
+2. **Safety** (DexScreener + RugCheck/GoPlus): liquidity, pair age,
+   mint/freeze authority, LP lock, top-10 holders, honeypot, taxes and owner
+   controls. If an API fails the check reads "unknown". It is never treated as a pass.
+3. **Global fees (Solana).** Total fees traders actually paid (base + priority +
+   Jito tips).
+   - Below `min_global_fees_sol` (1.5) means low activity, so no alert.
+   - High volume with tiny fees means a "likely wash volume" warning.
+   - These are filters only: they never override DANGER and never prove a coin is safe.
+4. **Legitimacy.**
+   - The source tweet is re-fetched after 15 min. If it was deleted → DANGER.
+   - Any profile change on the poster in the last 72h → DANGER.
+   - The exact CA is searched for on the official website.
+   - A first-time CA poster is flagged.
+   - A "narrative coin" (name matches a tier-1 tweet with no tier-1 engagement) is flagged HIGH RISK.
+5. **Backing.**
+   - Signal-account endorsements (tier 1 only counts for direct engagement with the CA).
+   - Distinct Telegram channels.
+   - Smart-wallet buys, weighted by each wallet's own track record. A wallet needs 10 resolved trades before it counts.
+6. **Connections.** Who is really behind the token. A linked account only counts
+   if it posted the CA itself or has it in its bio or pinned tweet. Otherwise it's a
+   "possible fake link". The bot also checks:
+   - the deployer's past launches
+   - tier-1/2 follows and recent interactions
+   - follower quality
+   - bought/hijacked-account signs (renames, mass-deleted tweets, recently turned crypto)
+7. **Chart** (GeckoTerminal, Birdeye fallback): momentum, volume, buy/sell ratio,
+   structure, distance from ATH, and an entry-quality label.
+8. **Chatter.** Posts are rated by Claude/Ollama. All scraped text is treated as
+   untrusted data: it's fenced off in the prompt, and the model output is
+   schema-checked and can only nudge a minor score.
+9. **Verdict.**
+   - **DANGER — DO NOT BUY**: anything above that fails.
+   - **UNCHECKED**: safety couldn't be verified.
+   - **VERIFIED**: the official site lists the CA, the tweet is still up, and safety passed.
+   - **UNCONFIRMED**: otherwise.
 
-   It skips tx hashes and signatures, quote tokens and system programs
-   (WETH, USDC, wSOL…), and it strips zero-width characters that people use to
-   hide addresses. Every sighting is stored with its source and first-seen time.
-3. **Resolve.** DexScreener finds the token's deepest pair on your chains. A
-   DexScreener link that holds a *pair* address gets mapped back to its token. If
-   there's no pair, the CA is logged and nothing is alerted. That also filters out
-   wallet addresses.
-4. **Safety** (`safety.py`) gives every check pass / warn / fail / unknown:
-   - **Market:** liquidity and pair age.
-   - **Solana (RugCheck):** mint/freeze authority, LP locked/burned, and the top-10
-     holder %. LP/AMM accounts are excluded from the holder %, but the creator's
-     own wallet still counts. Also RugCheck's own danger risks and its "rugged" flag.
-   - **EVM (GoPlus):** honeypot/can't-sell, buy/sell tax, dangerous owner
-     controls, and the top-10 holder %. The LP pair, burn addresses and locked
-     wallets are excluded from the holder %.
-   - If an API is down or returns nothing, the check is **unknown**. It is never
-     treated as a pass.
-5. **Verdict** (`scoring.py`):
-   - Any failed check → **DANGER — DO NOT BUY**.
-   - A critical check that couldn't be answered → **UNCHECKED**.
-   - Otherwise → **UNCONFIRMED**.
+   Nothing overrides DANGER. Only backing or an official confirmation can trigger
+   an alert; connection, chart and text scores can't on their own.
+10. **Follow-up.** For 48h after an alert, the bot sends **EXIT WARNING** alerts
+    for any of these:
+    - dev selling
+    - top holders selling
+    - liquidity pulled
+    - smart wallets exiting
+    - holders dropping
+    - buys fading while price is still up
 
-   **VERIFIED** and the weighted scores arrive in phase 2. Nothing can override
-   DANGER.
-6. **Alerts** (`alerts.py`) go to Discord (embed) and/or Telegram (HTML). A CA is
-   re-alerted only when its verdict changes. DANGER/UNCHECKED coins that only
-   showed up in the DexScreener feed are logged, not alerted, because otherwise
-   every rug on DexScreener would ping you. Once someone posts one somewhere
-   you watch, you get the "DO NOT BUY" alert. If a source fails 5 times in a row
-   you get **one** "source down" alert, and a second alert when it recovers.
+## Learning and the edge test
 
-## Config
+- **Outcomes.** Every coin is snapshotted when first seen (all features, scores and
+  verdict). Its outcome is recorded at 15m, 1h, 6h and 24h: max gain, max
+  drawdown, and whether it rugged.
+- **`backtest`**
+  - Replays the `strategies:` from `config.yaml` with fees and slippage.
+  - Always splits by **time**: it trains on older coins and tests on newer ones.
+  - Reports win rate, avg win/loss, max drawdown and EV per trade.
+  - Shows which signals actually predicted outcomes.
+  - Finds the best global-fees thresholds.
+  - Optionally fits an ML model (logistic regression / gradient boosting).
+  - Warns loudly about overfitting.
+- **Paper trading.** Runs the same strategies live with fake money. Entries are at the
+  alert price plus slippage. Exits happen on target, stop, time limit, an exit
+  warning, or a DANGER flip.
+- **`qualify`** grades each strategy against `config.yaml`'s criteria (default: 100
+  paper trades over 3+ weeks, positive EV after fees, drawdown under 30%). If
+  any criterion fails it says **NO EDGE FOUND**, retrains, and keeps paper trading.
+  It never switches to real trading.
 
-Every config file is optional. Built-in defaults live in `config.py`.
-
-- `config.yaml` sets chains, poll interval, safety thresholds, alert rules, and
-  per-host rate limits.
-- `accounts.yaml`, `signals.yaml`, `channels.yaml`, `smart_wallets.yaml` and
-  `fomo_wallets.yaml` are placeholders for later phases.
+**Leave it running in paper mode for weeks and read `qualify` before trusting any call.**
 
 ## Layout
 
 ```
-main.py            CLI entry point (run / --dry-run / check / health)
-pipeline.py        sighting -> resolve -> safety -> verdict -> alert
-config.py          config + secrets loading, log redaction
-db.py              SQLite state with versioned migrations
-net.py             polite HTTP: per-host rate limits, backoff, never raises
-extract.py         CA extraction
-safety.py          DexScreener / RugCheck / GoPlus checks
-scoring.py         verdicts (full scoring in phase 2)
-alerts.py          Discord / Telegram formatting and delivery
-dryrun.py          mocked HTTP transport serving sample_data/
-sources/           dex_source.py (phase 1); telegram/x/fomo to come
-backtest/          phase 7
-sample_data/       fake API responses + messages for --dry-run
-tests/             pytest suite
+main.py            CLI (run / --dry-run / check / health / leaderboard / backtest / qualify / logins)
+monitor.py         supervised loops: every source + background jobs, isolated from each other
+pipeline.py        sighting -> resolve -> safety -> fees -> legitimacy -> wallets -> connections
+                   -> chart -> text -> score -> snapshot -> alert -> paper trade
+extract.py         CA extraction            safety.py      DexScreener / RugCheck / GoPlus
+fees.py            global fees paid          verify.py      legitimacy checks
+discovery.py       X scorecards, tiers       wallets.py     smart wallets + dump flag
+graph.py           connections analysis      charts.py      OHLCV features + exit flags
+text_analysis.py   AI chatter rating         scoring.py     scores, verdicts, alert gating
+alerts.py          Discord / Telegram        papertrade.py  fake-money trades + qualify
+backtest/          outcomes.py, engine.py    sources/       dex, x, telegram, fomo
+db.py              SQLite + migrations       net.py         polite HTTP (rate limits, backoff)
+dryrun.py          offline demo harness      sample_data/   fake API responses
 ```
 
-## Notes and caveats
+## Caveats
 
-- **API shapes.** The DexScreener (`/token-profiles/latest/v1`,
-  `/latest/dex/tokens/…`, `/latest/dex/pairs/…`), RugCheck
-  (`/v1/tokens/{mint}/report`) and GoPlus (`/api/v1/token_security/{chain_id}`)
-  integrations follow their public API formats. The parsers are defensive, so a
-  missing field becomes "unknown" rather than a crash. Run `python main.py check
-  <some known CA>` once with real network access and confirm the output looks right.
-- **Rate limits.** Default rate limits sit under each provider's published free
-  limits. You can change them per host in `config.yaml`.
-- **Before trusting any calls:** leave the bot in alert and paper-trading mode for
-  weeks, and read the `qualify` report (phase 7) before putting real money behind
-  anything it says.
+- **Unverified API shapes.** This was built in a sandbox that couldn't reach
+  DexScreener, RugCheck, GoPlus, Helius, GeckoTerminal, pump.fun or fomo.family.
+  The integrations follow those services' public formats, and every parser treats
+  surprises as "unknown" rather than crashing. Run
+  `python main.py check <a CA you know>` first and compare against the websites.
+- **Unofficial APIs.** pump.fun's frontend API and twscrape are unofficial and can
+  break. The bot logs the failure, alerts once, and keeps running.
+- **X terms of service.** Scraping X with burner accounts is against X's terms.
+  Those accounts can be locked, so never use your main account.
+- **Free tiers.** Stay inside free limits. The per-host rate limits are in
+  `config.yaml`, and the X hourly budget is `x.requests_per_hour`.

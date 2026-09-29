@@ -1,0 +1,12 @@
+# Extra config used only by --dry-run (merged over config.yaml).
+signals:
+  - {handle: megastar, x_user_id: "1001", tier: 1, weight: 1.0}
+  - {handle: alphatrader, x_user_id: "3001", tier: 2, weight: 1.0}
+  - {handle: trustedvc, x_user_id: "4001", tier: 2, weight: 1.0}
+accounts:
+  - {handle: corpofficial, x_user_id: "2001", domains: [corp.example], chains: [solana]}
+channels:
+  - {channel: alpha_calls, label: Alpha Calls, weight: 1.0}
+  - {channel: degen_calls, label: Degen Calls, weight: 1.2}
+smart_wallets:
+  - {wallet: 7nvw5VToQS4K4ApicM3rDoL36xzo1dgcR1wfaeGmY6Uz, chain: solana, label: whale-1}

@@ -42,6 +42,10 @@ class MarketInfo:
     volume_m5: float | None = None
     buys_h1: int | None = None
     sells_h1: int | None = None
+    buys_h24: int | None = None
+    sells_h24: int | None = None
+    price_native: float | None = None
+    quote_symbol: str | None = None
     price_change_h1: float | None = None
     price_change_h24: float | None = None
     pair_created_at: float | None = None  # epoch seconds
@@ -94,7 +98,9 @@ def parse_pair(pair: dict, token_address: str | None = None) -> MarketInfo | Non
     if not chain or not addr:
         return None
     info = pair.get("info") or {}
-    txns_h1 = (pair.get("txns") or {}).get("h1") or {}
+    txns = pair.get("txns") or {}
+    txns_h1 = txns.get("h1") or {}
+    txns_h24 = txns.get("h24") or {}
     vol = pair.get("volume") or {}
     pc = pair.get("priceChange") or {}
     created = _f(pair.get("pairCreatedAt"))
@@ -115,6 +121,10 @@ def parse_pair(pair: dict, token_address: str | None = None) -> MarketInfo | Non
         volume_m5=_f(vol.get("m5")),
         buys_h1=_i(txns_h1.get("buys")),
         sells_h1=_i(txns_h1.get("sells")),
+        buys_h24=_i(txns_h24.get("buys")),
+        sells_h24=_i(txns_h24.get("sells")),
+        price_native=_f(pair.get("priceNative")),
+        quote_symbol=(pair.get("quoteToken") or {}).get("symbol"),
         price_change_h1=_f(pc.get("h1")),
         price_change_h24=_f(pc.get("h24")),
         pair_created_at=created / 1000 if created and created > 1e11 else created,

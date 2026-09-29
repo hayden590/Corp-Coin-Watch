@@ -14,7 +14,7 @@ from config import Secrets
 from db import DB
 from net import Http
 from safety import FAIL, PASS, UNKNOWN, WARN, SafetyReport, _fmt_age, _usd
-from scoring import DANGER, UNCHECKED, UNCONFIRMED, VERIFIED, Verdict
+from scoring import DANGER, UNCHECKED, UNCONFIRMED, VERIFIED, Assessment, Verdict
 
 log = logging.getLogger(__name__)
 
@@ -37,22 +37,42 @@ CHECK_LABELS = {
     "honeypot": "Honeypot",
     "taxes": "Taxes",
     "contract_controls": "Contract",
+    "tweet_persists": "Tweet persists",
+    "account_integrity": "Account integrity",
+    "official_website": "Official website",
+    "first_time_poster": "First-time poster",
+    "narrative": "Narrative",
+    "global_fees": "Global fees",
+    "wash_volume": "Volume vs fees",
 }
 FOOTER = "Not financial advice. Alerts only — this bot never trades."
 
 
 @dataclass
 class AlertContent:
-    verdict: Verdict
-    chain: str
-    address: str
+    a: Assessment
     name: str | None
     symbol: str | None
-    safety: SafetyReport
     source: str
     source_url: str | None
     dex_url: str | None
     links: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def verdict(self) -> Verdict:
+        return self.a.verdict
+
+    @property
+    def chain(self) -> str:
+        return self.a.chain
+
+    @property
+    def address(self) -> str:
+        return self.a.address
+
+    @property
+    def safety(self) -> SafetyReport:
+        return self.a.safety
 
     @property
     def title(self) -> str:
@@ -72,13 +92,74 @@ class AlertContent:
             out.append(f"FDV: {_usd(m['fdv'])}")
         if m.get("volume_h24") is not None:
             out.append(f"Vol 24h: {_usd(m['volume_h24'])}")
-        if m.get("price_change_h1") is not None:
-            out.append(f"1h: {m['price_change_h1']:+.1f}%")
+        f = self.a.fees
+        if f is not None and f.status == "ok":
+            ratio = f" | fees/vol {f.fees_to_volume * 100:.3f}%" if f.fees_to_volume is not None else ""
+            out.append(f"Global fees: {f.global_fees_sol:.2f} SOL{ratio}")
         return out
 
     def check_lines(self) -> list[str]:
-        return [f"{STATUS_EMOJI.get(c.status, '❔')} {CHECK_LABELS.get(c.name, c.name)}: {c.detail}"
-                for c in self.safety.checks]
+        checks = list(self.safety.checks)
+        if self.a.legit is not None:
+            checks += self.a.legit.checks
+        lines = [f"{STATUS_EMOJI.get(c.status, '❔')} {CHECK_LABELS.get(c.name, c.name)}: {c.detail}" for c in checks]
+        if self.a.fees is not None:
+            lines += [f"{STATUS_EMOJI.get(st, '❔')} {CHECK_LABELS.get(n, n)}: {d}" for n, st, d in self.a.fees.checks()]
+        return lines
+
+    def backing_lines(self) -> list[str]:
+        if not self.a.backing_breakdown:
+            return [f"Backing {self.a.backing:+.1f}: nobody we track is backing it yet"]
+        return [f"Backing {self.a.backing:+.1f}:"] + [f"  {p:+.1f} {l}" for l, p in self.a.backing_breakdown[:8]]
+
+    def connection_line(self) -> str | None:
+        c = self.a.connections
+        if c is None:
+            return None
+        parts = []
+        if c.creator:
+            how = next((x.how for x in c.linked if x.user and x.user.id == c.creator.id), "")
+            parts.append(f"Creator: @{c.creator.handle} ({how})")
+            parts.append("Creator followed by: " + (", ".join(f"@{h}" for h in c.tier1_followers[:4]) or "no tier-1")
+                         + (f" + {c.tier2_followers} tier-2" if c.tier2_followers else ""))
+            if c.interactions:
+                i = c.interactions[0]
+                parts.append(f"Recent interaction: @{i['handle']} {i['kind']} {i['days_ago']:.0f}d ago")
+            else:
+                parts.append("Recent interaction: none")
+            if c.creator.age_days is not None:
+                parts.append(f"Account age: {c.creator.age_days / 365:.1f}y, {c.creator.followers:,} followers")
+            if c.follower_quality:
+                fq = c.follower_quality
+                parts.append(f"Follower sample: {fq['no_pfp_pct']:.0f}% no pfp, {fq['zero_tweets_pct']:.0f}% no tweets, "
+                             f"{fq['new_pct']:.0f}% <30d old")
+        elif c.linked:
+            parts.append("No confirmed creator")
+        if c.deployer_summary:
+            parts.append(f"Deployer: {c.deployer_summary}")
+        if c.warnings:
+            parts.append("Warnings: " + "; ".join(c.warnings[:4]))
+        if c.note:
+            parts.append(c.note)
+        return " | ".join(parts) if parts else None
+
+    def insight_lines(self) -> list[str]:
+        out = []
+        if (cl := self.connection_line()):
+            out.append(f"Connections: {cl} (connection score {self.a.connection:+.1f})")
+        if self.a.chart is not None:
+            out.append(f"Chart: {self.a.chart.summary}")
+            out.append(f"Entry quality: {self.a.chart.entry}")
+        if self.a.exit_flags:
+            out.append("ACTIVE EXIT WARNINGS: " + "; ".join(d for _, d in self.a.exit_flags))
+        if self.a.text is not None:
+            t = self.a.text.summary
+            if self.a.text.main_claims:
+                t += " | claims: " + "; ".join(self.a.text.main_claims[:2])
+            out.append(f"Chatter: {t}")
+        if self.a.similar:
+            out.append(f"Similar setups: {self.a.similar['text']}")
+        return out
 
     def link_lines(self) -> list[str]:
         out = []
@@ -103,6 +184,8 @@ def format_text(a: AlertContent) -> str:
     lines += [f"  {line}" for line in a.check_lines()]
     if ml := a.market_lines():
         lines.append("Market: " + " | ".join(ml))
+    lines += a.backing_lines()
+    lines += a.insight_lines()
     lines += a.link_lines()
     if a.dex_url:
         lines.append(f"DexScreener: {a.dex_url}")
@@ -117,6 +200,10 @@ def format_discord(a: AlertContent) -> dict[str, Any]:
     fields.append({"name": "Checks", "value": _clip("\n".join(a.check_lines()) or "—", 1000), "inline": False})
     if ml := a.market_lines():
         fields.append({"name": "Market", "value": _clip(" | ".join(ml), 1000), "inline": False})
+    fields.append({"name": "Backing", "value": _clip("\n".join(a.backing_lines()), 1000), "inline": False})
+    for line in a.insight_lines():
+        name, _, value = line.partition(": ")
+        fields.append({"name": _clip(name, 250), "value": _clip(value or "—", 1000), "inline": False})
     if ll := a.link_lines():
         fields.append({"name": "Links", "value": _clip("\n".join(ll), 1000), "inline": False})
     src = a.source + (f" — {a.source_url}" if a.source_url else "")
@@ -125,7 +212,7 @@ def format_discord(a: AlertContent) -> dict[str, Any]:
         "title": _clip(f"{VERDICT_HEADLINE.get(a.verdict.label, a.verdict.label)}", 256),
         "description": _clip(f"**{a.title}** on **{a.chain}**", 2000),
         "color": DISCORD_COLORS.get(a.verdict.label, 0x9E9E9E),
-        "fields": fields,
+        "fields": fields[:25],
         "footer": {"text": FOOTER},
     }
     if a.dex_url:
@@ -145,6 +232,9 @@ def format_telegram(a: AlertContent) -> str:
     parts.append("\n".join(e(line) for line in a.check_lines()))
     if ml := a.market_lines():
         parts.append(e(" | ".join(ml)))
+    parts.append("\n".join(e(line) for line in a.backing_lines()))
+    if il := a.insight_lines():
+        parts.append("\n".join(e(line) for line in il))
     if ll := a.link_lines():
         parts.append("\n".join(e(line) for line in ll))
     parts.append(f"Source: {e(a.source)}" + (f" — {e(a.source_url)}" if a.source_url else ""))
@@ -152,6 +242,16 @@ def format_telegram(a: AlertContent) -> str:
         parts.append(f'<a href="{e(a.dex_url, quote=True)}">DexScreener</a>')
     parts.append(f"<i>{e(FOOTER)}</i>")
     return _clip("\n".join(parts), 4000)
+
+
+def format_exit_warning(chain: str, address: str, title: str, flags: list[tuple[str, str]], dex_url: str | None) -> tuple[str, dict, str]:
+    head = f"⚠️ EXIT WARNING — {title} ({chain})"
+    body = [f"CA: {address}"] + [f"• {d}" for _, d in flags] + ([f"DexScreener: {dex_url}"] if dex_url else []) + [FOOTER]
+    text = "\n".join(["=" * 60, head, *body])
+    discord = {"embeds": [{"title": _clip(head, 256), "description": _clip("\n".join(body), 3900), "color": 0xFB8C00}],
+               "allowed_mentions": {"parse": []}}
+    tg = f"<b>{html.escape(head)}</b>\n" + "\n".join(html.escape(b) for b in body)
+    return text, discord, _clip(tg, 4000)
 
 
 def _clip(s: str, n: int) -> str:
@@ -186,6 +286,14 @@ class Alerter:
         self.db.record_alert(a.chain, a.address, "verdict", a.verdict.label, sent,
                              {"title": a.title, "reasons": a.verdict.reasons})
         return True
+
+    async def send_exit_warning(self, chain: str, address: str, title: str, flags: list[tuple[str, str]],
+                                dex_url: str | None) -> bool:
+        text, discord, tg = format_exit_warning(chain, address, title, flags, dex_url)
+        sent = await self._deliver(text, discord, tg)
+        if sent:
+            self.db.record_alert(chain, address, "exit_warning", None, sent, {"flags": [f for f, _ in flags]})
+        return bool(sent)
 
     async def send_system(self, message: str) -> None:
         text = f"⚙️ corp-coin-watch: {message}"

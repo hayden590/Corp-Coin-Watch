@@ -54,8 +54,10 @@ class Http:
         base_backoff: float = 2.0,
         timeout: float = 20.0,
         on_request: Callable[[str], None] | None = None,
+        default_per_minute: float = 30,
     ):
         self._limits = rate_limits or {}
+        self.default_per_minute = default_per_minute
         self._limiters: dict[str, HostLimiter] = {}
         self.max_retries = max_retries
         self.base_backoff = base_backoff
@@ -72,7 +74,7 @@ class Http:
 
     def _limiter(self, host: str) -> HostLimiter:
         if host not in self._limiters:
-            self._limiters[host] = HostLimiter(self._limits.get(host, 30))
+            self._limiters[host] = HostLimiter(self._limits.get(host, self.default_per_minute))
         return self._limiters[host]
 
     async def request(self, method: str, url: str, *, expect_json: bool = True, **kwargs: Any) -> FetchResult:
@@ -80,9 +82,10 @@ class Http:
         # Only log scheme+host+path: query strings / paths of webhooks can hold secrets,
         # so callers pass a `log_name` for anything sensitive.
         name = kwargs.pop("log_name", None) or f"{host}{urlparse(url).path}"
+        max_retries = kwargs.pop("retries", self.max_retries)
         last_err = "unknown error"
         status = None
-        for attempt in range(self.max_retries + 1):
+        for attempt in range(max_retries + 1):
             await self._limiter(host).wait()
             if self.on_request:
                 self.on_request(host)
@@ -92,7 +95,7 @@ class Http:
                 if status == 429 or status >= 500:
                     last_err = f"HTTP {status}"
                     retry_after = _retry_after(resp)
-                    if attempt < self.max_retries:
+                    if attempt < max_retries:
                         delay = retry_after if retry_after is not None else self._backoff(attempt)
                         log.warning("%s -> %s, retrying in %.1fs", name, last_err, delay)
                         await asyncio.sleep(delay)
@@ -108,12 +111,13 @@ class Http:
                     return FetchResult(False, status, None, "invalid JSON")
             except httpx.HTTPError as exc:
                 last_err = f"{type(exc).__name__}"
-                if attempt < self.max_retries:
+                if attempt < max_retries:
                     delay = self._backoff(attempt)
                     log.warning("%s -> %s, retrying in %.1fs", name, last_err, delay)
                     await asyncio.sleep(delay)
                     continue
-        log.error("%s failed after %d attempts: %s", name, self.max_retries + 1, last_err)
+        log.log(logging.ERROR if max_retries else logging.INFO, "%s failed after %d attempt(s): %s",
+                name, max_retries + 1, last_err)
         return FetchResult(False, status, None, last_err)
 
     def _backoff(self, attempt: int) -> float:
