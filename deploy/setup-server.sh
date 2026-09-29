@@ -20,6 +20,14 @@ if [ "$PYV" != "True" ]; then
   echo "Python 3.11+ is required (use Ubuntu 24.04)."; exit 1
 fi
 
+MEM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+if [ "$MEM_MB" -lt 2000 ] && ! swapon --show | grep -q .; then
+  echo "==> Small server (${MEM_MB} MB RAM): adding a 2 GB swap file as a safety buffer"
+  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+  chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 echo "==> Creating the 'ccw' service user"
 id ccw >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/ccw --shell /usr/sbin/nologin ccw
 

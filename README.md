@@ -83,7 +83,9 @@ VERIFIED/UNCONFIRMED coins, and exit warnings get **💸 Open to sell**.
 
 ### Run it on a server (so your computer can be off)
 
-A small cloud server runs the bot 24/7 for roughly $4–6/month. Good choices are a Hetzner CX22, a DigitalOcean Basic
+A small cloud server runs the bot 24/7. **Free:** Google Cloud's always-free *e2-micro*. It must be in
+`us-west1`, `us-central1` or `us-east1`, with a *Standard* persistent disk of 30 GB or less, and the setup script adds swap for its
+1 GB RAM. **Paid:** roughly $4–6/month. Good choices are a Hetzner CX22, a DigitalOcean Basic
 droplet or a Vultr Regular instance. Pick **Ubuntu 24.04**, the cheapest size (1–2 GB RAM is plenty) and a region near you.
 
 1. Create the server and log in: `ssh root@<server-ip>`
