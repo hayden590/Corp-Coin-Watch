@@ -2,7 +2,8 @@
 (free tier, BIRDEYE_API_KEY). Candles are cached in memory per timeframe.
 
 Features: price change per timeframe, volume vs rolling average, buy/sell
-ratio, volatility, higher-highs / lower-highs structure, distance from ATH,
+ratio, candle shape (green share, wicks, biggest candle, volume spike, higher lows),
+volatility, higher-highs / lower-highs structure, distance from ATH,
 time since launch, and liquidity / holder-count / top-holder trends from our
 own market snapshots. Exit-warning flags are computed from the same history.
 """
@@ -80,6 +81,31 @@ def ath_distance(c: list[Candle]) -> float | None:
         return None
     ath = max(x[2] for x in c)
     return (c[-1][4] / ath - 1) * 100 if ath > 0 else None
+
+
+def candle_shape(c: list[Candle], window: int = 12) -> dict:
+    """What the recent candles look like, as numbers the AI can learn from:
+    share of green candles, average upper / lower wick (selling / buying pressure),
+    biggest single candle, volume spike vs normal, and how many of the last lows
+    were higher than the one before (buyers stepping in higher)."""
+    w = [x for x in c[-window:] if x[1] > 0 and x[4] > 0]
+    if len(w) < 3:
+        return {}
+    ranges = [(x[2] - x[3]) or 1e-12 for x in w]
+    upper = [(x[2] - max(x[1], x[4])) / r for x, r in zip(w, ranges)]
+    lower = [(min(x[1], x[4]) - x[3]) / r for x, r in zip(w, ranges)]
+    vols = sorted(x[5] for x in w)
+    med_vol = vols[len(vols) // 2]
+    lows = [x[3] for x in w[-7:]]
+    return {
+        "green_ratio": sum(x[4] > x[1] for x in w) / len(w),
+        "upper_wick": sum(upper) / len(upper),
+        "lower_wick": sum(lower) / len(lower),
+        "biggest_candle_pct": max(abs(x[4] / x[1] - 1) for x in w) * 100,
+        "last_candle_pct": (w[-1][4] / w[-1][1] - 1) * 100,
+        "volume_spike": (max(vols) / med_vol) if med_vol > 0 else None,
+        "higher_lows": sum(b > a for a, b in zip(lows, lows[1:])),
+    }
 
 
 def trend(values: list[float | None]) -> float | None:
@@ -243,7 +269,7 @@ class Charts:
             f["change_1m"] = pct_change(c1, 1)
         if c5:
             f.update(change_5m=pct_change(c5, 1), vol_ratio_5m=vol_ratio(c5), volatility_5m=volatility(c5),
-                     structure=structure(c5[-36:]), change_15m=pct_change(c5, 3))
+                     structure=structure(c5[-36:]), change_15m=pct_change(c5, 3), **candle_shape(c5))
         f["change_1h"] = (pct_change(c1h, 1) if c1h and len(c1h) > 1 else None) or m.price_change_h1
         longest = c1h if c1h and len(c1h) > 3 else c15 or c5
         f["ath_distance_pct"] = ath_distance(longest) if longest else None

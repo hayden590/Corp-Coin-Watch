@@ -9,7 +9,8 @@
 - Reports win rate, avg win/loss, max drawdown, EV per trade after costs, which
   signals actually predicted outcomes, the best global-fees thresholds, and an
   optional ML model (logistic regression / gradient boosting) predicting
-  "hits +TP% before -SL%".
+  "hits +TP% before -SL%", a second one predicting "rugs within 24h", which
+  signals come before rugs, and which hours of the day worked best.
 - Warns loudly when results look too good to be true.
 """
 from __future__ import annotations
@@ -35,6 +36,16 @@ SIGNALS = [
     "vol_ratio_5m", "volatility_5m", "ath_distance_pct", "buy_sell_ratio", "text_sentiment", "text_hype",
     "text_bot_like", "creator_confirmed", "hijack_flags", "tier1_followers",
 ]
+RUG_CRASH = 0.9
+NOT_SIGNALS = {"verdict_rank"}  # the verdict is our own rule output, not something to learn from twice
+
+
+def signal_keys(rows: list[dict]) -> list[str]:
+    """SIGNALS first, then every other numeric feature the snapshots recorded (new ones get
+    picked up automatically as the bot records more)."""
+    seen = {k for r in rows for k, v in r["features"].items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    return [k for k in SIGNALS if k in seen] + sorted(seen - set(SIGNALS) - NOT_SIGNALS)
 
 
 # --- data --------------------------------------------------------------------
@@ -136,6 +147,18 @@ def label(row: dict, tp_pct: float, sl_pct: float) -> int | None:
     return int(r >= tp_pct / 100 - 1e-9)
 
 
+def rug_label(row: dict, tp_pct: float = 0, sl_pct: float = 0) -> int | None:
+    """1 = rugged within 24h (liquidity pulled, honeypot, or price crashed 90%+ - on pump.fun a dev
+    dump doesn't pull liquidity), 0 = didn't, None = not known yet."""
+    outs = row["outcomes"].values()
+    vals = [o.get("rugged") for o in outs if o.get("rugged") is not None]
+    if any(vals) or any((o.get("max_drawdown") or 0) <= -RUG_CRASH for o in outs):
+        return 1
+    if not vals:
+        return None
+    return 0 if "24h" in row["outcomes"] else None
+
+
 def metrics(pnls: list[float], stake_pct: float = 5.0) -> dict:
     if not pnls:
         return {"n": 0}
@@ -167,11 +190,12 @@ def run_strategy(rows: list[dict], rule: dict, costs: dict, ml=None) -> list[flo
 
 # --- signal attribution ----------------------------------------------------------
 
-def attribution(rows: list[dict], tp: float, sl: float, min_n: int = 10) -> list[dict]:
-    labelled = [(r["features"], label(r, tp, sl)) for r in rows]
+def attribution(rows: list[dict], tp: float, sl: float, min_n: int = 10, labeller=None) -> list[dict]:
+    labeller = labeller or label
+    labelled = [(r["features"], labeller(r, tp, sl)) for r in rows]
     labelled = [(f, y) for f, y in labelled if y is not None]
     out = []
-    for key in SIGNALS:
+    for key in signal_keys(rows):
         pairs = [(float(f[key]), y) for f, y in labelled if isinstance(f.get(key), (int, float))]
         if len(pairs) < min_n or len({x for x, _ in pairs}) < 2:
             continue
@@ -184,6 +208,24 @@ def attribution(rows: list[dict], tp: float, sl: float, min_n: int = 10) -> list
                     "hit_rate_high": round(sum(hi) / len(hi), 3) if hi else None,
                     "hit_rate_low": round(sum(lo) / len(lo), 3) if lo else None})
     return sorted(out, key=lambda d: -abs(d["corr"]))
+
+
+def by_hour(rows: list[dict], tp: float, sl: float, block: int = 4, min_n: int = 10) -> list[dict]:
+    """Hit rate and rug rate by time of day (UTC, in `block`-hour slots) - when buying worked best."""
+    slots: dict[int, list[tuple[int | None, int | None]]] = {}
+    for r in rows:
+        h = r["features"].get("hour_utc")
+        if isinstance(h, (int, float)):
+            slots.setdefault(int(h) // block * block, []).append((label(r, tp, sl), rug_label(r)))
+    out = []
+    for start in sorted(slots):
+        hits = [y for y, _ in slots[start] if y is not None]
+        rugs = [y for _, y in slots[start] if y is not None]
+        if len(hits) >= min_n:
+            out.append({"hours": f"{start:02d}-{start + block:02d} UTC", "n": len(hits),
+                        "hit_rate": round(sum(hits) / len(hits), 3),
+                        "rug_rate": round(sum(rugs) / len(rugs), 3) if rugs else None})
+    return out
 
 
 def _corr(xs, ys) -> float:
@@ -243,7 +285,8 @@ class MLModel:
             return pickle.load(fh)
 
 
-def train_ml(train: list[dict], test: list[dict], tp: float, sl: float) -> tuple[MLModel | None, dict]:
+def train_ml(train: list[dict], test: list[dict], tp: float, sl: float,
+             labeller=None) -> tuple[MLModel | None, dict]:
     try:
         from sklearn.ensemble import GradientBoostingClassifier
         from sklearn.linear_model import LogisticRegression
@@ -252,13 +295,14 @@ def train_ml(train: list[dict], test: list[dict], tp: float, sl: float) -> tuple
         from sklearn.preprocessing import StandardScaler
     except ImportError:
         return None, {"skipped": "scikit-learn not installed"}
-    tr = [(r["features"], label(r, tp, sl)) for r in train]
-    te = [(r["features"], label(r, tp, sl)) for r in test]
+    labeller = labeller or label
+    tr = [(r["features"], labeller(r, tp, sl)) for r in train]
+    te = [(r["features"], labeller(r, tp, sl)) for r in test]
     tr = [(f, y) for f, y in tr if y is not None]
     te = [(f, y) for f, y in te if y is not None]
     if len(tr) < 50 or len(te) < 20 or len({y for _, y in tr}) < 2:
         return None, {"skipped": f"not enough labelled data (train {len(tr)}, test {len(te)}; need 50/20)"}
-    keys = [k for k in SIGNALS if sum(isinstance(f.get(k), (int, float)) for f, _ in tr) >= len(tr) * 0.3]
+    keys = [k for k in signal_keys(train) if sum(isinstance(f.get(k), (int, float)) for f, _ in tr) >= len(tr) * 0.3]
     medians = {k: statistics.median([float(f[k]) for f, _ in tr if isinstance(f.get(k), (int, float))]) for k in keys}
     results, best = {}, None
     for kind, est in (("logistic_regression", make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))),
@@ -311,6 +355,10 @@ def run(db: DB, cfg: dict, model_path: Path | None = None) -> dict:
     report["ml"] = ml_info
     if ml and model_path:
         ml.save(model_path)
+    rug, rug_info = train_ml(train, test, tp, sl, labeller=rug_label)
+    report["rug_ml"] = rug_info
+    if rug and model_path:
+        rug.save(rug_model_path(model_path))
     strategies = cfg.get("strategies") or []
     report["strategies"] = []
     for s in strategies:
@@ -320,12 +368,18 @@ def run(db: DB, cfg: dict, model_path: Path | None = None) -> dict:
         report["strategies"].append({"name": s.get("name"), "train": tr_m, "test": te_m,
                                      "warnings": overfit_warnings(tr_m, te_m, len(strategies))})
     report["signals"] = attribution(train + test, tp, sl)
+    report["rug_signals"] = attribution(train + test, tp, sl, labeller=rug_label)
+    report["hours"] = by_hour(train + test, tp, sl)
     base = strategies[0] if strategies else {"min_verdict": "UNCONFIRMED"}
     report["fee_thresholds"] = {
         "min_global_fees_sol": best_threshold(train, test, base, "min_global_fees_sol", "global_fees_sol", costs),
         "min_fees_to_volume": best_threshold(train, test, base, "min_fees_to_volume", "fees_to_volume", costs),
     }
     return report
+
+
+def rug_model_path(model_path: Path) -> Path:
+    return Path(model_path).with_name("rug_model.pkl")
 
 
 def similar_stats(db: DB, verdict: str, backing: float, chain: str, cfg: dict, min_n: int = 10) -> dict:
@@ -366,6 +420,18 @@ def format_report(rep: dict) -> str:
                  f"low {sig['hit_rate_low']}  (n={sig['n']})")
     if not rep["signals"]:
         L.append("  not enough labelled data yet")
+    L += ["", "Rug warning signs (correlation with rugging within 24h; + = more of it, more rugs):"]
+    for sig in rep.get("rug_signals", [])[:12]:
+        L.append(f"  {sig['signal']:<20} corr {sig['corr']:+.3f}  rug-rate high {sig['hit_rate_high']}  "
+                 f"low {sig['hit_rate_low']}  (n={sig['n']})")
+    if not rep.get("rug_signals"):
+        L.append("  not enough rug outcomes yet")
+    L += ["", "Time of day (UTC) - how often coins first seen then hit the target / rugged:"]
+    for h in rep.get("hours", []):
+        rug = f"{h['rug_rate']:.0%}" if h["rug_rate"] is not None else "?"
+        L.append(f"  {h['hours']}  hit {h['hit_rate']:.0%}  rug {rug}  (n={h['n']})")
+    if not rep.get("hours"):
+        L.append("  not enough data per time slot yet")
     L += ["", "Global fees thresholds (chosen on train, checked on test):"]
     for k, v in rep["fee_thresholds"].items():
         if not v:
@@ -374,5 +440,6 @@ def format_report(rep: dict) -> str:
             te = v["test"]
             L.append(f"  {k} >= {v['threshold']:.4g}: train EV {v['train']['ev']:+.2%} (n={v['train']['n']}), "
                      f"test EV {te.get('ev', 0):+.2%} (n={te.get('n', 0)})")
-    L += ["", f"ML: {json.dumps(rep['ml'])}"]
+    L += ["", f"ML (hits target): {json.dumps(rep['ml'])}",
+          f"ML (rug spotter): {json.dumps(rep.get('rug_ml'))}"]
     return "\n".join(L)

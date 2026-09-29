@@ -36,6 +36,7 @@ x:
   queries: ["pump.fun", "dexscreener.com", "CA:", "contract address"]
   requests_per_hour: 150                   # hourly budget across all burner accounts
   no_account_cooldown_minutes: 15
+  chatter_budget_share: 0.5                # reading X chatter on ordinary new coins uses at most half the budget
 
 verify:
   persistence_delay_minutes: 15            # re-fetch source tweet after this long
@@ -107,6 +108,7 @@ alerts:
   buy_link: ""
   min_backing_to_alert: 1.0                # backing / official confirmation / proven AI pick trigger alerts
   ai_pick_min_prob: 0.65                   # AI pick: model's chance of hitting the target
+  ai_pick_max_rug_prob: 0.4                # ...and the rug spotter must rate it below this
   danger_alert_sources: [x, telegram, fomo, manual]
   exit_warnings: true
   monitor_hours: 48

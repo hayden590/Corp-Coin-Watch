@@ -11,7 +11,7 @@ import logging
 import time
 from pathlib import Path
 
-from backtest.engine import MLModel, metrics, matches
+from backtest.engine import MLModel, matches, metrics, rug_model_path
 from db import DB
 from sources.dex_source import best_pair
 
@@ -28,12 +28,19 @@ class PaperTrader:
         self.stake = float((cfg.get("paper") or {}).get("stake", 50))
         self.model_path = model_path
         self._ml = None
+        self._rug = None
         self._ml_loaded_at = 0.0
 
     def ml(self) -> MLModel | None:
         if self.model_path and time.time() - self._ml_loaded_at > 3600:
             self._ml, self._ml_loaded_at = MLModel.load(self.model_path), time.time()
+            self._rug = MLModel.load(rug_model_path(self.model_path))
         return self._ml
+
+    def rug_ml(self) -> MLModel | None:
+        """The rug spotter, trained alongside the main model (same reload schedule)."""
+        self.ml()
+        return self._rug
 
     def on_alert(self, a) -> list[str]:
         """Open paper positions for every strategy whose entry rule matches."""

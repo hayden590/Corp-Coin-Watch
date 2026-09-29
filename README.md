@@ -144,7 +144,7 @@ python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
 python main.py test-notify        # send a sample alert
-python -m pytest                  # 178 tests
+python -m pytest                  # 188 tests
 ```
 
 ## How a coin is judged
@@ -218,8 +218,28 @@ python -m pytest                  # 178 tests
     the coin at 65% or more *and* there must be a hard signal: a trusted wallet buying, some backing, or a
     decent chart.
   - Expect this to take a few weeks of history.
-- **X chatter.** For promising coins it searches X for the exact contract address, rates what people
-  say, and learns which accounts call coins early. Needs X burner accounts (`x-login`).
+- **What people are saying.** For every coin that passes the basic safety checks it reads:
+  - **all of X**: a search for the exact contract address, from anyone, not just accounts it follows.
+    Ordinary coins use at most half the hourly X budget, so the searches that find new coins never starve.
+    Promising coins always get searched. Needs X burner accounts (`x-login`).
+  - **the token's own page**: the comments / theses under pump.fun coins.
+  - A free keyword reading scores the mood, hype vs substance, and scam talk ("rug", "dev sold",
+    "bundled", ...). With `text.backend: claude` an AI reads promising coins' chatter too.
+  - It also learns which X accounts call coins early.
+- **Rug spotter.** A second AI trains daily on which coins rugged within 24h (liquidity pulled, honeypot,
+  or a 90%+ crash). Once it has proven itself on unseen coins, alerts show "Rug risk (AI)" and a high
+  rug risk blocks an AI pick.
+- **What it learns from.** Every coin is recorded with dozens of numbers, and the AIs work out which
+  ones matter:
+  - rug warning signs: each safety check (LP lock, mint/freeze controls, taxes, RugCheck risks,
+    holder concentration), deployer history;
+  - candle shapes: green-candle share, upper/lower wicks, biggest candle, volume spikes, higher lows,
+    higher highs / lower highs, distance from the high;
+  - market activity: 5m / 1h / 6h price moves, buy/sell counts and ratios, volume vs liquidity, FDV vs liquidity;
+  - time of day and weekday, so `backtest` shows which hours worked best;
+  - chatter: number of X posts and page comments, mood, hype, bot-like repetition, scam talk.
+- **Honest limits.** It learns from real outcomes, not videos or opinions. No model wins every trade;
+  the goal is winning more than losing after fees, and `qualify` says whether it got there.
 
 ## Learning and the edge test
 
@@ -230,7 +250,8 @@ python -m pytest                  # 178 tests
   - Replays the `strategies:` from `config.yaml` with fees and slippage.
   - Always splits by **time**: it trains on older coins and tests on newer ones.
   - Reports win rate, avg win/loss, max drawdown and EV per trade.
-  - Shows which signals actually predicted outcomes.
+  - Shows which signals actually predicted outcomes, which ones came before rugs, and hit / rug
+    rates by time of day.
   - Finds the best global-fees thresholds.
   - Optionally fits an ML model (logistic regression / gradient boosting).
   - Warns loudly about overfitting.

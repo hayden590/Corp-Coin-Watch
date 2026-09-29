@@ -21,6 +21,7 @@ Nothing overrides DANGER. Connection/text/chart scores alone never cause an aler
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -70,6 +71,9 @@ class Assessment:
     verdict: Verdict | None = None
     ml_prob: float | None = None       # trained model's chance of hitting the target (None = no trusted model)
     x_mentions: int | None = None      # recent X posts mentioning this CA
+    rug_prob: float | None = None      # rug model's chance this coin rugs (None = no trusted model)
+    comments: int | None = None        # comments / theses on the token's own page (pump.fun, Fomo)
+    seen_at: float | None = None       # first sighting (for time-of-day features)
 
     @property
     def total(self) -> float:
@@ -92,7 +96,18 @@ class Assessment:
             "endorsements_t1": sum(1 for l, _ in self.backing_breakdown if l.startswith("tier-1")),
             "endorsements_t2": sum(1 for l, _ in self.backing_breakdown if l.startswith("tier-2")),
             "telegram_channels": sum(1 for l, _ in self.backing_breakdown if l.startswith("telegram")),
+            "x_mentions": self.x_mentions, "comments": self.comments,
         }
+        # Rug warning signs, one number per safety check: 0 pass, 1 warn, 2 fail (missing = unknown).
+        for c in self.safety.checks:
+            if c.status in SAFETY_LEVEL:
+                f[f"safety_{c.name}"] = SAFETY_LEVEL[c.status]
+        # Market activity from DexScreener - known for every coin, not only the deeply analysed ones.
+        if m is not None:
+            f.update(market_features(m))
+        # When it was seen (UTC), so the backtest can show which hours / days work best.
+        t = time.gmtime(self.seen_at or time.time())
+        f["hour_utc"], f["weekday"] = t.tm_hour, t.tm_wday
         if self.fees is not None:
             f["global_fees_sol"] = self.fees.global_fees_sol
             f["fees_to_volume"] = self.fees.fees_to_volume
@@ -104,17 +119,48 @@ class Assessment:
             f["first_time_poster"] = int(bool(ftp and ftp.status == WARN))
         if self.chart is not None:
             f["chart_quality"] = self.chart.quality
-            for k in ("change_5m", "change_1h", "vol_ratio_5m", "volatility_5m", "ath_distance_pct", "buy_sell_ratio"):
-                f[k] = self.chart.features.get(k)
+            for k, v in self.chart.features.items():
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    f[k] = v
+            if isinstance(self.chart.features.get("structure"), str):
+                f["higher_highs"] = int(self.chart.features["structure"] == "higher_highs")
+                f["lower_highs"] = int(self.chart.features["structure"] == "lower_highs")
         if self.text is not None:
             f["text_sentiment"] = self.text.sentiment
             f["text_hype"] = self.text.hype_vs_substance
             f["text_bot_like"] = int(self.text.bot_like)
+            f["text_posts"] = self.text.n_texts
+            f["text_duplicate_ratio"] = self.text.duplicate_ratio
+            f["text_red_flags"] = len(self.text.red_flags)
         if self.connections is not None:
             f["creator_confirmed"] = int(self.connections.creator is not None)
             f["hijack_flags"] = len(self.connections.hijack_flags)
             f["tier1_followers"] = len(self.connections.tier1_followers)
+            f["deployer_flags"] = len(self.connections.deployer_flags)
         return f
+
+
+SAFETY_LEVEL = {PASS: 0, WARN: 1, FAIL: 2}
+
+
+def _ratio(a, b) -> float | None:
+    return round(a / b, 4) if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b > 0 else None
+
+
+def market_features(m) -> dict:
+    """Price moves, buy/sell pressure and money flow from DexScreener's pair data."""
+    g = lambda k: getattr(m, k, None)  # noqa: E731
+    f = {
+        "price_change_m5": g("price_change_m5"), "price_change_h1": g("price_change_h1"),
+        "price_change_h6": g("price_change_h6"), "volume_m5": g("volume_m5"), "volume_h1": g("volume_h1"),
+        "buys_m5": g("buys_m5"), "sells_m5": g("sells_m5"), "buys_h1": g("buys_h1"), "sells_h1": g("sells_h1"),
+        "buy_sell_m5": _ratio(g("buys_m5"), g("sells_m5")),
+        "buy_sell_h1": _ratio(g("buys_h1"), g("sells_h1")),
+        "buy_sell_h24": _ratio(g("buys_h24"), g("sells_h24")),
+        "volume_h1_to_liquidity": _ratio(g("volume_h1"), g("liquidity_usd")),
+        "fdv_to_liquidity": _ratio(g("fdv"), g("liquidity_usd")),
+    }
+    return {k: v for k, v in f.items() if v is not None}
 
 
 # --- component scores ---------------------------------------------------------
@@ -258,6 +304,7 @@ def should_alert(a: Assessment, sources: set[str], cfg: dict) -> tuple[bool, str
     prob_min = float(acfg.get("ai_pick_min_prob", 0.65))
     hard_signal = (a.backing > 0 or any(b["record"].trusted for b in a.smart_buys)
                    or (a.chart is not None and (a.chart.quality or 0) >= 0.6))
-    if a.ml_prob is not None and a.ml_prob >= prob_min and hard_signal:
+    rug_ok = a.rug_prob is None or a.rug_prob < float(acfg.get("ai_pick_max_rug_prob", 0.4))
+    if a.ml_prob is not None and a.ml_prob >= prob_min and hard_signal and rug_ok:
         return True, f"AI pick ({a.ml_prob:.0%})"
     return False, f"backing {a.backing} < {acfg.get('min_backing_to_alert', 1.0)}"

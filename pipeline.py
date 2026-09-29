@@ -170,6 +170,8 @@ class Pipeline:
         a.legit = await self.verifier.assess(address, market.name, market.symbol, links.get("website") or [])
         a.smart_buys = self.wallets.smart_buys(address)
         a.dump_flags = self.wallets.dump_flags(address)
+        first = self.db.first_sighting(address)
+        a.seen_at = first["seen_at"] if first else time.time()
         inputs = self._backing_inputs(address)
         score(a, self.cfg, inputs)  # preliminary: decides whether deep analysis is worth the API calls
         self._ai_score(a)
@@ -177,22 +179,28 @@ class Pipeline:
         sources = {s["source"] for s in self.db.sightings_for(address)}
         promising = (sources & SOCIAL or a.backing > 0 or
                      (a.ml_prob is not None and a.ml_prob >= float(self.cfg["alerts"].get("ai_pick_min_prob", 0.65)) - 0.1))
-        if basic_ok and not a.verdict.is_danger and promising:
-            # Paid / rate-limited lookups only for coins worth it (Helius free tier is ~300 calls/day).
-            a.fees = await self.fees.check(market)
-            a.connections = await self.graph.analyse(address, chain, links, market.dex_id, report.deployer)
-            a.chart = await self.charts.analyse(market)
-            x_posts = await self._x_chatter(address)
+        if basic_ok and not a.verdict.is_danger:
+            # What people are saying - all of X plus the comments on the token's own page - for every coin
+            # that passes the basic checks, so the AI learns how chatter relates to pumps and rugs.
+            x_posts = await self._x_chatter(address, keep_budget=not promising)
+            comments = await self._comments(chain, address, market)
             a.x_mentions = len(x_posts) if x_posts is not None else None
-            a.text = await self.text.analyse(chain, address, f"{market.name} ({market.symbol})", x_posts)
+            a.comments = len(comments) if comments is not None else None
+            label = f"{market.name} ({market.symbol})"
+            if promising:
+                # Paid / rate-limited lookups only for coins worth it (Helius free tier is ~300 calls/day).
+                a.fees = await self.fees.check(market)
+                a.connections = await self.graph.analyse(address, chain, links, market.dex_id, report.deployer)
+                a.chart = await self.charts.analyse(market)
+            a.text = await self.text.analyse(chain, address, label, (x_posts or []) + (comments or []),
+                                             use_model=bool(promising))
             score(a, self.cfg, inputs)
             self._ai_score(a)
         a.exit_flags = [(r["flag"], r["detail"]) for r in
                         self.db.q("SELECT flag, detail FROM exit_flags WHERE chain = ? AND address = ?", (chain, address))]
         a.similar = engine.similar_stats(self.db, a.verdict.label, a.backing, chain, self.cfg)
 
-        first = self.db.first_sighting(address)
-        outcomes.snapshot(self.db, a, first["seen_at"] if first else time.time())
+        outcomes.snapshot(self.db, a, a.seen_at)
         self.db.upsert_token(chain, address, last_verdict=a.verdict.label)
 
         ok, why = should_alert(a, sources, self.cfg)
@@ -215,22 +223,36 @@ class Pipeline:
                       None if sent else "verdict unchanged")
 
     def _ai_score(self, a: Assessment) -> None:
-        """Model's chance this coin hits the target - only from a model that proved itself on unseen coins."""
-        model = self.paper.ml()
+        """The AIs' chances this coin hits the target / rugs - only from models that proved themselves
+        on coins they never trained on."""
         bt = self.cfg.get("backtest") or {}
-        if model and model.trustworthy(float(bt.get("ml_min_test_auc", 0.6)), int(bt.get("ml_min_train", 150))):
-            try:
-                a.ml_prob = round(model.predict(a.features()), 3)
-            except Exception as exc:  # a stale model must never break the pipeline
-                log.warning("AI score failed: %s", exc)
+        gate = (float(bt.get("ml_min_test_auc", 0.6)), int(bt.get("ml_min_train", 150)))
+        for attr, model in (("ml_prob", self.paper.ml()), ("rug_prob", self.paper.rug_ml())):
+            if model and model.trustworthy(*gate):
+                try:
+                    setattr(a, attr, round(model.predict(a.features()), 3))
+                except Exception as exc:  # a stale model must never break the pipeline
+                    log.warning("AI score (%s) failed: %s", attr, exc)
 
-    async def _x_chatter(self, address: str) -> list[str] | None:
-        """Recent X posts mentioning this CA (cached 30 min per coin to save the X budget)."""
+    async def _comments(self, chain: str, address: str, market: MarketInfo) -> list[str] | None:
+        """Comments / theses on the token's own page (pump.fun coins)."""
+        if chain != "solana" or not (market.dex_id in ("pumpfun", "pumpswap") or address.endswith("pump")):
+            return None
+        return await self.graph.pumpfun_comments(address)
+
+    async def _x_chatter(self, address: str, keep_budget: bool = False) -> list[str] | None:
+        """Recent X posts mentioning this CA from anyone on X (cached 30 min per coin).
+        keep_budget: for ordinary coins, only search while most of the hourly X budget is
+        unused, so the searches that FIND new coins never starve."""
         if not self.x:
             return None
         hit = self._x_cache.get(address)
         if hit and time.time() - hit[0] < 1800:
             return hit[1]
+        budget, used = getattr(self.x, "budget", None), getattr(self.x, "used_this_hour", None)
+        share = float((self.cfg.get("x") or {}).get("chatter_budget_share", 0.5))
+        if keep_budget and isinstance(budget, (int, float)) and isinstance(used, (int, float)) and used >= budget * share:
+            return None
         try:
             tweets = await self.x.search(address, int((self.cfg.get("x") or {}).get("chatter_limit", 25)))
         except XUnavailable as exc:

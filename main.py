@@ -163,14 +163,19 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
     print(f"Helius: {'key set' if secrets.helius_api_key else 'no key (Solana wallets + global fees disabled)'}; "
           f"budget {cfg['wallets'].get('helius_daily_calls')} calls/day")
     print("Tracked wallets: " + (", ".join(f"{r['n']} {r['source']}" for r in tracked) or "none yet"))
-    from backtest.engine import MLModel
+    from backtest.engine import MLModel, rug_model_path
 
-    model = MLModel.load(MODEL_PATH)
-    if model:
-        print(f"AI model: trained on {getattr(model, 'n_train', 0)} coins, test AUC {getattr(model, 'test_auc', None)} - "
-              f"{'USED for AI picks' if model.trustworthy() else 'not good enough yet, AI picks off'}")
-    else:
-        print("AI model: not trained yet (needs history - retrains daily)")
+    n_seen = db.q1("SELECT COUNT(*) AS n FROM feature_snapshots")["n"]
+    n_done = db.q1("SELECT COUNT(DISTINCT address) AS n FROM outcomes WHERE horizon = '24h'")["n"]
+    print(f"Learning data: {n_seen} coins studied, {n_done} with a full 24h outcome")
+    for name, path, use in (("AI model (hits target)", MODEL_PATH, "USED for AI picks"),
+                            ("AI rug spotter", rug_model_path(MODEL_PATH), "USED to warn / block AI picks")):
+        model = MLModel.load(path)
+        if model:
+            print(f"{name}: trained on {getattr(model, 'n_train', 0)} coins, test AUC "
+                  f"{getattr(model, 'test_auc', None)} - {use if model.trustworthy() else 'not good enough yet, off'}")
+        else:
+            print(f"{name}: not trained yet (needs history - retrains daily)")
     fomo_url = (cfg.get("fomo") or {}).get("leaderboard_url")
     print("Fomo leaderboard traders: " + ("following via FOMO API" if fomo_url and secrets.fomo_api_key
                                           else "off (add FOMO_API_KEY from fomoapi.io to follow top Fomo traders)"))

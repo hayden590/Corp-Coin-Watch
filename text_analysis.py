@@ -1,7 +1,9 @@
 """What people are saying about a CA: X replies/quotes, Telegram mentions, Fomo theses.
 
 Backends (config text.backend): "claude" (Anthropic API, small cheap model),
-"ollama" (local, free), or "none" (local heuristics only).
+"ollama" (local, free), or "none" (local heuristics only). The free keyword
+reading (mood, hype, scam words) always runs; an AI backend refines it for
+promising coins only, to keep the bill small.
 
 SECURITY - all scraped text is untrusted data:
   * it is wrapped in a randomly-tagged <untrusted_posts_NONCE> block and the model
@@ -120,6 +122,49 @@ def validate_output(raw: str | dict) -> dict | None:
             "main_claims": [c for c in claims if c], "red_flags": [f for f in flags if f]}
 
 
+POSITIVE = {"bullish", "moon", "mooning", "send", "sending", "gem", "based", "strong", "lfg", "wagmi", "buy",
+            "buying", "bought", "aped", "ape", "pump", "pumping", "runner", "legit", "solid", "early", "love",
+            "great", "good", "huge", "bottom", "hold", "holding", "diamond", "chad", "community", "cto", "100x",
+            "1000x", "10x", "fire", "alpha"}
+NEGATIVE = {"rug", "rugged", "rugpull", "scam", "scammer", "honeypot", "dump", "dumped", "dumping", "dev sold",
+            "sold", "sell", "selling", "dead", "rekt", "bundle", "bundled", "insider", "insiders", "jeet", "jeets",
+            "fake", "bot", "bots", "exit", "avoid", "careful", "warning", "slow rug", "farm", "drained", "down bad",
+            "cabal", "snipers", "sniped"}
+HYPE = {"moon", "100x", "1000x", "10x", "lfg", "send", "sending", "gem", "next", "millionaire", "easy",
+        "guaranteed", "free money", "don't miss", "last chance", "rocket", "🚀", "🔥", "💎"}
+SUBSTANCE = {"team", "doxxed", "utility", "roadmap", "audit", "locked", "burned", "renounced", "chart",
+             "volume", "holders", "liquidity", "website", "product", "partnership", "listing", "cto"}
+RED_WORDS = {"rug": "rug talk", "rugged": "rug talk", "scam": "scam talk", "honeypot": "honeypot talk",
+             "dev sold": "dev selling talk", "bundle": "bundled supply talk", "bundled": "bundled supply talk",
+             "insiders": "insider talk", "drained": "drained talk", "guaranteed": "guaranteed returns promised"}
+WORD_RE = re.compile(r"[a-z0-9']+|[🚀🔥💎]")
+
+
+def _terms(text: str) -> list[str]:
+    words = WORD_RE.findall(text.lower())
+    return words + [f"{a} {b}" for a, b in zip(words, words[1:])]
+
+
+def keyword_reading(texts: list[str]) -> tuple[float | None, float | None, list[str]]:
+    """Free, local: mood (-1..1), hype (0 substance .. 1 hype) and scam-word flags from word counts."""
+    pos = neg = hype = subst = 0
+    flags: Counter = Counter()
+    for t in texts:
+        terms = _terms(t)
+        pos += sum(w in POSITIVE for w in terms)
+        neg += sum(w in NEGATIVE for w in terms)
+        hype += sum(w in HYPE for w in terms)
+        subst += sum(w in SUBSTANCE for w in terms)
+        for w in set(terms):
+            if w in RED_WORDS:
+                flags[RED_WORDS[w]] += 1
+    sentiment = round((pos - neg) / (pos + neg), 2) if pos + neg else None
+    hype_score = round(hype / (hype + subst), 2) if hype + subst else None
+    # A flag counts once at least two posts (or a quarter of them) say it.
+    need = max(2, len(texts) // 4)
+    return sentiment, hype_score, [f"{f} ({n} posts)" for f, n in flags.most_common(3) if n >= need]
+
+
 def duplicate_ratio(texts: list[str]) -> float:
     norm = [re.sub(r"[^a-z]", "", t.lower())[:80] for t in texts if t.strip()]
     if len(norm) < 3:
@@ -187,7 +232,8 @@ class TextAnalyzer:
             raise RuntimeError(r.error or "bad Ollama reply")
         return (r.data.get("message") or {}).get("content", "")
 
-    async def analyse(self, chain: str, address: str, label: str, extra: list[str] | None = None) -> TextResult:
+    async def analyse(self, chain: str, address: str, label: str, extra: list[str] | None = None,
+                      use_model: bool = True) -> TextResult:
         max_age = float(self.cfg.get("recheck_minutes", 30)) * 60
         row = self.db.q1("""SELECT result_json FROM text_scores WHERE chain = ? AND address = ? AND scored_at >= ?
                             ORDER BY scored_at DESC LIMIT 1""", (chain, address, time.time() - max_age))
@@ -195,7 +241,8 @@ class TextAnalyzer:
         if row:
             cached = TextResult(**json.loads(row["result_json"]))
             # Re-rate (and re-bill an AI call) only when enough new posts have arrived.
-            if len(texts) - cached.n_texts < int(self.cfg.get("rescore_min_new_texts", 3)):
+            upgrade = use_model and self.backend in ("claude", "ollama") and cached.backend != self.backend
+            if not upgrade and len(texts) - cached.n_texts < int(self.cfg.get("rescore_min_new_texts", 3)):
                 return cached
         res = TextResult(n_texts=len(texts), backend=self.backend)
         if not texts:
@@ -205,7 +252,11 @@ class TextAnalyzer:
         res.injection_attempts = sum(1 for t in texts if INJECTION_RE.search(t))
         if res.injection_attempts:
             res.red_flags.append(f"prompt-injection attempt in {res.injection_attempts} post(s)")
-        if self.backend in ("claude", "ollama"):
+        res.sentiment, res.hype_vs_substance, words = keyword_reading(texts)
+        res.red_flags += words
+        res.backend = "keywords"
+        if self.backend in ("claude", "ollama") and use_model:
+            res.backend = self.backend
             try:
                 raw = await (self._claude if self.backend == "claude" else self._ollama)(build_prompt(texts, label))
                 parsed = validate_output(raw)

@@ -54,6 +54,8 @@ DEFAULTS: dict[str, Any] = {
         "snapshot_hours": 24,
         "no_account_cooldown_minutes": 15,
         "pace": 1.0,
+        "chatter_limit": 25,
+        "chatter_budget_share": 0.5,   # ordinary coins only get X chatter while under half the hourly budget
     },
     "verify": {
         "persistence_delay_minutes": 15,
@@ -115,6 +117,7 @@ DEFAULTS: dict[str, Any] = {
         "max_texts": 40,
         "recheck_minutes": 30,
         "bot_duplicate_ratio": 0.5,
+        "rescore_min_new_texts": 3,
     },
     "fomo": {
         # FOMO API (fomoapi.io) - only used when FOMO_API_KEY is set
@@ -154,6 +157,7 @@ DEFAULTS: dict[str, Any] = {
         "danger_alert_sources": ["x", "telegram", "fomo", "manual"],
         "min_backing_to_alert": 1.0,
         "ai_pick_min_prob": 0.65,
+        "ai_pick_max_rug_prob": 0.4,
         "desktop": True,
         "desktop_on": ["VERIFIED", "UNCONFIRMED", "DANGER", "UNCHECKED", "EXIT"],
         "buy_link": "",

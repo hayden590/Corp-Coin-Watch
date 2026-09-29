@@ -62,6 +62,17 @@ class ConnectionReport:
         return self.hijack_flags + [f"possible fake link: @{h}" for h in self.fake_links] + self.deployer_flags
 
 
+def parse_comments(data, limit: int = 50) -> list[str]:
+    """Comment texts from a replies response ({"replies": [...]}, a bare list, ...)."""
+    items = data.get("replies") or data.get("data") or data.get("comments") if isinstance(data, dict) else data
+    out = []
+    for it in items if isinstance(items, list) else []:
+        text = (it.get("text") or it.get("content") or it.get("body")) if isinstance(it, dict) else None
+        if isinstance(text, str) and text.strip():
+            out.append(text.strip()[:500])
+    return out[:limit]
+
+
 def handle_from_url(url: str) -> str | None:
     """x.com/<handle> -> handle. Status / community / intent links are not accounts."""
     try:
@@ -88,12 +99,27 @@ class Graph:
         self.x = x
         self._cache: dict[str, tuple[float, dict]] = {}
         self._reports: dict[str, tuple[float, "ConnectionReport"]] = {}
+        self._comments: dict[str, tuple[float, list[str]]] = {}
 
     # --- a) who is behind the token ------------------------------------------
     async def pumpfun_meta(self, mint: str) -> dict | None:
         base = self.cfg.get("pumpfun_api", "https://frontend-api-v3.pump.fun")
         r = await self.http.get_json(f"{base}/coins/{mint}")
         return r.data if r.ok and isinstance(r.data, dict) else None
+
+    async def pumpfun_comments(self, mint: str) -> list[str] | None:
+        """Comments / theses people left on the token's pump.fun page (cached per coin).
+        Untrusted text: it only goes to text analysis, which treats it as data."""
+        hit = self._comments.get(mint)
+        if hit and time.time() - hit[0] < float(self.cfg.get("comments_cache_minutes", 30)) * 60:
+            return hit[1]
+        base = self.cfg.get("pumpfun_api", "https://frontend-api-v3.pump.fun")
+        r = await self.http.get_json(f"{base}/replies/{mint}", params={"limit": 50, "offset": 0}, retries=0)
+        if not r.ok:
+            return None
+        texts = parse_comments(r.data)
+        self._comments[mint] = (time.time(), texts)
+        return texts
 
     async def confirm(self, acc: LinkedAccount, address: str) -> None:
         u = acc.user

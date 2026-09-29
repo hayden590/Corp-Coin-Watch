@@ -265,7 +265,8 @@ def synthetic_history(db: DB, n: int = 180, seed: int = 7) -> None:
         feats = {"backing": backing, "total": backing, "global_fees_sol": fees, "fees_to_volume": rnd.uniform(0, 0.004),
                  "liquidity_usd": rnd.uniform(5e3, 3e5), "top10_pct": rnd.uniform(5, 40), "chart_quality": rnd.random(),
                  "text_sentiment": rnd.uniform(-1, 1), "connection": rnd.choice([0, 0, 0.5, 1.5]),
-                 "smart_wallet_buys": rnd.choice([0, 0, 1, 2])}
+                 "smart_wallet_buys": rnd.choice([0, 0, 1, 2]), "hour_utc": time.gmtime(first).tm_hour,
+                 "safety_lp_locked": rnd.choice([0, 0, 1]) + (1 if verdict == "DANGER" else 0)}
         addr = f"SYNTH{i:04d}"
         db.x("""INSERT INTO feature_snapshots (chain, address, taken_at, first_seen_at, entry_price, verdict, features_json)
                 VALUES ('solana', ?, ?, ?, 1.0, ?, ?)""", (addr, first, first, verdict, json.dumps(feats)))

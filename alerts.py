@@ -162,8 +162,13 @@ class AlertContent:
         if self.a.ml_prob is not None:
             out.append(f"AI score: {self.a.ml_prob:.0%} chance to hit the target before the stop "
                        "(model tested on coins it never saw)")
+        if self.a.rug_prob is not None:
+            out.append(f"Rug risk (AI): {self.a.rug_prob:.0%} chance it rugs within 24h"
+                       + (" - HIGH, be careful" if self.a.rug_prob >= 0.5 else ""))
         if self.a.x_mentions:
             out.append(f"X buzz: {self.a.x_mentions} recent posts mention this CA")
+        if self.a.comments:
+            out.append(f"Token page: {self.a.comments} comments / theses read")
         if self.a.similar:
             out.append(f"Similar setups: {self.a.similar['text']}")
         return out
