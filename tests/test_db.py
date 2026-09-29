@@ -55,3 +55,12 @@ def test_request_counter():
     db.count_request("api.x")
     db.count_request("api.x", 2)
     assert db.source_health()[0]["requests_this_hour"] == 3
+
+
+def test_config_local_overrides_per_machine(tmp_path):
+    from config import load_config
+
+    (tmp_path / "config.yaml").write_text("alerts:\n  desktop: true\n  min_backing_to_alert: 2.0\n")
+    (tmp_path / "config.local.yaml").write_text("alerts:\n  desktop: false\n")
+    c = load_config(tmp_path)
+    assert c["alerts"]["desktop"] is False and c["alerts"]["min_backing_to_alert"] == 2.0

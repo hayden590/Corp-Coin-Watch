@@ -20,3 +20,6 @@ __pycache__/
 # Env
 .venv/
 venv/
+
+# Per-machine overrides
+config.local.yaml

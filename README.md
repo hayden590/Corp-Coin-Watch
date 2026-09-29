@@ -81,6 +81,30 @@ set up the Telegram bot (or a Discord webhook) and install that app on your phon
 Telegram alerts come with tap-able **🛒 Open to buy** and **📈 Chart** buttons. The buy button only appears on
 VERIFIED/UNCONFIRMED coins, and exit warnings get **💸 Open to sell**.
 
+### Run it on a server (so your computer can be off)
+
+A small cloud server runs the bot 24/7 for roughly $4–6/month. Good choices are a Hetzner CX22, a DigitalOcean Basic
+droplet or a Vultr Regular instance. Pick **Ubuntu 24.04**, the cheapest size (1–2 GB RAM is plenty) and a region near you.
+
+1. Create the server and log in: `ssh root@<server-ip>`
+2. Get the setup script and run it. The repo is private, so either use a GitHub
+   [fine-grained token](https://github.com/settings/tokens?type=beta) with read access to this repo, or add the
+   server's SSH key as a deploy key:
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/<you>/Corp-Coin-Watch/<branch>/deploy/setup-server.sh  # or scp it
+   sudo bash setup-server.sh https://<token>@github.com/<you>/Corp-Coin-Watch.git <branch>
+   ```
+3. Put your keys in `/opt/corp-coin-watch/.env` (`sudo nano /opt/corp-coin-watch/.env`).
+4. If you use them, do the one-time logins on the server:
+   `cd /opt/corp-coin-watch && sudo -u ccw .venv/bin/python main.py telegram-login` (and `x-login`).
+5. Start it with `sudo systemctl start corp-coin-watch`. From then on it starts on boot and restarts itself if it crashes.
+6. Watch the live log with `sudo journalctl -u corp-coin-watch -f`, check status with `sudo -u ccw .venv/bin/python main.py health`,
+   and get the latest code with `sudo bash /opt/corp-coin-watch/deploy/update.sh`.
+
+A server has no screen, so desktop pop-ups are switched off there (`config.local.yaml`). Install
+**Telegram Desktop** on your laptop and **Telegram** on your phone, and each alert pops up on both, with the
+Open to buy / Chart buttons.
+
 Then list the accounts and wallets you care about. All of these files are optional:
 
 - `signals.yaml` – influential X accounts, **by numeric user ID**, with a tier (1 = mega public figures, 2 = top traders), a weight and optional known wallets. Also takes `force_include` / `force_block` lists.
@@ -101,7 +125,7 @@ python main.py leaderboard        # best and worst CA-posting X accounts
 python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py test-notify        # send a sample desktop pop-up
-python -m pytest                  # 164 tests
+python -m pytest                  # 165 tests
 ```
 
 ## How a coin is judged

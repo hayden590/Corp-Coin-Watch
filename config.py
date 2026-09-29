@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULTS: dict[str, Any] = {
     "chains": ["solana", "ethereum", "base", "bsc"],
     "poll": {
-        "dexscreener_seconds": 90,
+        "dexscreener_seconds": 30,
         "x_search_min_seconds": 180,
         "x_search_max_seconds": 300,
         "x_watch_seconds": 240,
@@ -222,9 +222,11 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_config(config_dir: Path | str | None = None) -> dict[str, Any]:
-    """Merge config.yaml over DEFAULTS and attach the optional list files."""
+    """Merge config.yaml (then this machine's config.local.yaml) over DEFAULTS and
+    attach the optional list files."""
     base = Path(config_dir) if config_dir else ROOT
     cfg = deep_merge(DEFAULTS, _load_yaml(base / "config.yaml"))
+    cfg = deep_merge(cfg, _load_yaml(base / "config.local.yaml"))  # per-machine, gitignored
     for name, (filename, key) in OVERRIDE_FILES.items():
         data = _load_yaml(base / filename)
         cfg[name] = data.get(key) or []

@@ -4,7 +4,7 @@
 chains: [solana, ethereum, base, bsc]      # DexScreener chain IDs
 
 poll:
-  dexscreener_seconds: 90
+  dexscreener_seconds: 30
   x_search_min_seconds: 180                # X search sweeps: random 3-5 min
   x_search_max_seconds: 300
   x_watch_seconds: 240                     # watched accounts (by user ID)

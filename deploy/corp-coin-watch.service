@@ -1,0 +1,24 @@
+[Unit]
+Description=corp-coin-watch (alerts and paper trading only - never trades)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ccw
+Group=ccw
+WorkingDirectory=/opt/corp-coin-watch
+ExecStart=/opt/corp-coin-watch/.venv/bin/python main.py run
+Restart=always
+RestartSec=15
+Environment=PYTHONUNBUFFERED=1
+
+# Hardening: the bot only needs its own folder.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/corp-coin-watch
+
+[Install]
+WantedBy=multi-user.target
