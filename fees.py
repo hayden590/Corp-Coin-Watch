@@ -84,10 +84,14 @@ def evaluate(market: MarketInfo, txs: list[dict], complete: bool, sol_usd: float
     """Pure calculation (tested with normal / low-activity / wash-traded samples)."""
     now = time.time()
     txs = [t for t in txs if t.get("timestamp")]
+    txns_24h = (market.buys_h24 or 0) + (market.sells_h24 or 0)
+    if not txs and txns_24h > 0:
+        # Helius indexed nothing for this pool but DexScreener shows trades: we can't
+        # measure fees, and must not call it "low activity" (that would silence the alert).
+        return FeeResult("unknown", detail=f"Helius returned no swaps; DexScreener shows {txns_24h} trades/24h")
     sampled = sum_fees(txs, jito)
     day = [t for t in txs if now - float(t["timestamp"]) <= 86400]
     fees_24h = sum_fees(day, jito)
-    txns_24h = (market.buys_h24 or 0) + (market.sells_h24 or 0)
     estimated = False
     oldest = min((float(t["timestamp"]) for t in txs), default=now)
     covers_24h = complete or now - oldest >= 86400

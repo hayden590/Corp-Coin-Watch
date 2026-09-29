@@ -63,3 +63,8 @@ def test_incomplete_sample_is_scaled_and_marked_estimate():
 def test_unknown_never_filters():
     r = FeeResult("unknown", detail="needs HELIUS_API_KEY")
     assert not r.low_activity and r.checks()[0][1] == UNKNOWN
+
+
+def test_no_indexed_swaps_is_unknown_not_low_activity():
+    r = evaluate(market(50_000, 300, 200), [], True, 150, CFG, JITO)
+    assert r.status == "unknown" and not r.low_activity
