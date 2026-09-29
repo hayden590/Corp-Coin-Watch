@@ -242,7 +242,8 @@ async def add_accounts_from_env(db_path: Path, x_accounts: str, x_cookies: str) 
             continue
         await api.pool.add_account(parts[0], parts[1], parts[2], ":".join(parts[3:]))
         n += 1
-    for entry in filter(None, (e.strip() for e in x_cookies.split(";"))):
+    # Several accounts are separated by "|" (a cookie string itself contains ";").
+    for entry in filter(None, (e.strip() for e in x_cookies.split("|"))):
         username, _, cookies = entry.partition("=")
         if not cookies:
             log.error("X_COOKIES entry needs username=cookie_string")

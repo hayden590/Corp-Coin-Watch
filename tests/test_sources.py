@@ -152,3 +152,26 @@ def test_leaderboard_refresh_drops_traders_who_fell_off():
     removed = w.replace_fomo(cfg(), parse_fomoapi_leaderboard(FOMOAPI_REPLY, 15))
     rows = {r["wallet"] for r in db.q("SELECT wallet FROM wallets WHERE source = 'fomo'")}
     assert removed == 1 and len(rows) == 3 and "98kfF7rmsg1QDUEoCqNE7g7M1FdrTt92TEp2CLzypump" not in rows
+
+
+def test_x_cookie_accounts_parse_with_semicolons(tmp_path, monkeypatch):
+    import sources.x_source as xs
+
+    added = []
+
+    class FakePool:
+        async def add_account(self, *a, cookies=None):
+            added.append((a[0], cookies))
+
+        async def login_all(self):
+            pass
+
+    class FakeAPI:
+        def __init__(self, path):
+            self.pool = FakePool()
+
+    import twscrape
+    monkeypatch.setattr(twscrape, "API", FakeAPI)
+    n = run(xs.add_accounts_from_env(tmp_path / "x.db", "",
+                                     "burner1=auth_token=abc123; ct0=def456 | burner2=auth_token=zzz; ct0=yyy"))
+    assert n == 2 and added[0] == ("burner1", "auth_token=abc123; ct0=def456") and added[1][0] == "burner2"
