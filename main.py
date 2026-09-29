@@ -134,15 +134,24 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
         return datetime.fromtimestamp(v, timezone.utc).strftime("%Y-%m-%d %H:%M UTC") + f" ({(now - v) / 60:.0f}m ago)"
 
     rows = db.source_health()
-    print(f"{'source / host':<28} {'status':<8} {'req/hr':>6}  last success")
-    for r in rows:
-        in_hour = r["hour_start"] and now - r["hour_start"] < 3600
-        reqs = r["requests_this_hour"] if in_hour else 0
-        print(f"{r['source']:<28} {r['status']:<8} {reqs:>6}  {ts(r['last_success_at'])}")
+
+    def reqs(r) -> int:
+        return r["requests_this_hour"] if r["hour_start"] and now - r["hour_start"] < 3600 else 0
+
+    # Sources (dexscreener, x, fomo, telegram) have a real up/down status; hosts only count API calls.
+    sources = [r for r in rows if "." not in r["source"]]
+    hosts = sorted((r for r in rows if "." in r["source"] and reqs(r)), key=lambda r: -reqs(r))
+    print(f"{'source':<14} {'status':<8} last success")
+    for r in sources:
+        print(f"{r['source']:<14} {r['status']:<8} {ts(r['last_success_at'])}")
         if r["status"] == "error" and r["last_error"]:
-            print(f"{'':<28} last error: {r['last_error']} ({r['consecutive_failures']} in a row)")
+            print(f"{'':<14} last error: {r['last_error']} ({r['consecutive_failures']} in a row)")
     if not rows:
         print("(no activity recorded yet)")
+    if hosts:
+        top = hosts[:8]
+        print("API calls this hour: " + ", ".join(f"{r['source']} {reqs(r)}" for r in top)
+              + (f" (+{len(hosts) - len(top)} websites checked)" if len(hosts) > len(top) else ""))
 
     print("\nX (twscrape):")
     x = make_x_client(cfg, db)
@@ -190,7 +199,8 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
     print(f"Desktop pop-ups: {desk}; click opens: {cfg['alerts'].get('buy_link') or 'DexScreener'}")
     print("Alert channels:",
           ", ".join(n for n, ok in (("discord", secrets.discord_webhook_url),
-                                    ("telegram", secrets.telegram_bot_token and secrets.telegram_chat_id)) if ok)
+                                    ("telegram", secrets.telegram_bot_token and secrets.telegram_chat_id),
+                                    ("ntfy (phone / laptop app)", secrets.ntfy_topic)) if ok)
           or "none configured (console only)")
     open_trades = db.q1("SELECT COUNT(*) AS n FROM paper_trades WHERE status = 'open'")["n"]
     pending = db.q1("SELECT COUNT(*) AS n FROM pending_checks WHERE done_at IS NULL")["n"]
