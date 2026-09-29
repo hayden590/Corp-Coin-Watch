@@ -32,6 +32,7 @@ echo "==> Creating the 'ccw' service user"
 id ccw >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/ccw --shell /usr/sbin/nologin ccw
 
 echo "==> Getting the code"
+git config --global --get-all safe.directory 2>/dev/null | grep -qx "$APP" || git config --global --add safe.directory "$APP"  # repo is owned by the ccw user
 if [ -d "$APP/.git" ]; then
   git -C "$APP" fetch origin "$BRANCH" && git -C "$APP" checkout "$BRANCH" && git -C "$APP" pull --ff-only origin "$BRANCH"
 else
