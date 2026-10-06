@@ -158,7 +158,7 @@ DEFAULTS: dict[str, Any] = {
     "alerts": {
         "discord": True,
         "telegram": True,
-        "danger_alert_sources": ["x", "telegram", "fomo", "manual"],
+        "danger_alert_sources": [],   # e.g. ["manual"]: send DANGER/UNCHECKED warnings for coins from these sources
         "min_backing_to_alert": 1.0,
         "ai_pick_min_prob": 0.65,
         "ai_pick_max_rug_prob": 0.4,
@@ -167,6 +167,8 @@ DEFAULTS: dict[str, Any] = {
         "buy_link": "",
         "ntfy_server": "https://ntfy.sh",
         "exit_warnings": True,
+        "daily_report": True,          # one quiet learning report a day on the phone
+        "daily_report_hour": 18,       # UTC
         "monitor_hours": 48,
         "source_down_after_failures": 5,
     },

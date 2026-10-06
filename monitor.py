@@ -172,10 +172,25 @@ class Monitor:
             added = await self.pipe.wallets.discover()
             if added:
                 log.info("wallet discovery: now tracking %d new early-buyer wallet(s)", len(added))
+        await self._daily_report()
         bt = self.cfg.get("backtest") or {}
         if self.pipe.paper.model_path and time.time() - self._last_retrain >= float(bt.get("retrain_hours", 24)) * 3600:
             self._last_retrain = time.time()
             await asyncio.to_thread(self._retrain)
+
+    async def _daily_report(self) -> None:
+        """One quiet learning report a day (after daily_report_hour UTC), so progress is visible
+        without logging into the server."""
+        hour = int((self.cfg.get("alerts") or {}).get("daily_report_hour", 18))
+        now = time.gmtime()
+        if not (self.cfg.get("alerts") or {}).get("daily_report", True) or now.tm_hour < hour:
+            return
+        if not self.db.mark_seen("daily_report", time.strftime("%Y-%m-%d", now)):
+            return
+        from papertrade import learning_summary
+
+        title, body = learning_summary(self.db, self.pipe.paper.model_path, self.cfg)
+        await self.pipe.alerter.send_report(title, body)
 
     def _retrain(self) -> None:
         """Daily: retrain the AI on everything seen so far (time-split); AI picks only use it if it tests well."""

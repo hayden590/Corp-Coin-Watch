@@ -170,3 +170,39 @@ def qualify(db: DB, cfg: dict, backtest_report: dict | None = None) -> tuple[boo
             L.append(f"Retraining skipped ({reason}); paper trading continues and it will retry next time.")
         L.append("Do not trust these calls with real money.")
     return any_pass, "\n".join(L)
+
+
+def learning_summary(db: DB, model_path: Path | None, cfg: dict | None = None) -> tuple[str, str]:
+    """Once-a-day "is it actually learning?" report: what it studied, how the AIs test, how the
+    fake-money trades went. Returns (title, body)."""
+    day = time.time() - 86400
+    seen = db.q1("SELECT COUNT(*) AS n FROM feature_snapshots")["n"]
+    seen_day = db.q1("SELECT COUNT(*) AS n FROM feature_snapshots WHERE first_seen_at >= ?", (day,))["n"]
+    done = db.q1("SELECT COUNT(DISTINCT address) AS n FROM outcomes WHERE horizon = '24h'")["n"]
+    lines = [f"Studied {seen} coins (+{seen_day} today), {done} with a full 24h result."]
+    if model_path:
+        from backtest.engine import MLModel, rug_model_path
+
+        bt = (cfg or {}).get("backtest") or {}
+        gate = (float(bt.get("ml_min_test_auc", 0.6)), int(bt.get("ml_min_train", 150)))
+        for name, path in (("Winner-finder AI", Path(model_path)), ("Rug-spotter AI", rug_model_path(model_path))):
+            m = MLModel.load(path)
+            if not m:
+                lines.append(f"{name}: not trained yet.")
+                continue
+            auc = getattr(m, "test_auc", None)
+            score = f"test score {auc:.2f}" if auc is not None else "no test score"
+            lines.append(f"{name}: {score} on unseen coins (0.5 = guessing) - "
+                         + ("in use." if m.trustworthy(*gate) else "not good enough yet, off."))
+    closed = db.q("SELECT pnl_pct FROM paper_trades WHERE status = 'closed' AND closed_at >= ?", (day,))
+    open_n = db.q1("SELECT COUNT(*) AS n FROM paper_trades WHERE status = 'open'")["n"]
+    if closed:
+        pnls = [r["pnl_pct"] or 0 for r in closed]
+        wins = sum(p > 0 for p in pnls)
+        lines.append(f"Paper trades (fake money) closed today: {len(pnls)}, {wins} won, "
+                     f"average {sum(pnls) / len(pnls):+.1f}% after fees. {open_n} still open.")
+    else:
+        lines.append(f"Paper trades (fake money): none closed today, {open_n} open.")
+    alerts = db.q1("SELECT COUNT(*) AS n FROM alerts WHERE kind = 'verdict' AND sent_at >= ?", (day,))["n"]
+    lines.append(f"Alerts sent today: {alerts}. Still practice only - no real money.")
+    return "Coin Watch daily learning report", "\n".join(lines)

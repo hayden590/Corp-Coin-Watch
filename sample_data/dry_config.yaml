@@ -10,3 +10,6 @@ channels:
   - {channel: degen_calls, label: Degen Calls, weight: 1.2}
 smart_wallets:
   - {wallet: 7nvw5VToQS4K4ApicM3rDoL36xzo1dgcR1wfaeGmY6Uz, chain: solana, label: whale-1}
+# The demo shows what an unsafe-coin warning looks like (off by default in config.yaml).
+alerts:
+  danger_alert_sources: [x, telegram, fomo, manual]

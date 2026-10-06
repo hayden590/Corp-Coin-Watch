@@ -296,15 +296,25 @@ def should_alert(a: Assessment, sources: set[str], cfg: dict) -> tuple[bool, str
         return True, "verified"
     if "manual" in sources:
         return True, "manual check"
-    if a.backing >= float(acfg.get("min_backing_to_alert", 1.0)):
-        return True, f"backing {a.backing}"
+    # Random X accounts posting a CA is exactly what a coordinated shill looks like, so they never
+    # count toward an alert on their own: only proven accounts, channels and wallets do.
+    real = real_backing(a)
+    if real >= float(acfg.get("min_backing_to_alert", 1.0)):
+        return True, f"backing {real}"
     # AI pick: a model that has proven itself on unseen coins rates this highly. It still needs at
     # least one hard signal (a trusted wallet buying, some backing, or a decent chart) - chatter or
     # connections alone never trigger an alert.
     prob_min = float(acfg.get("ai_pick_min_prob", 0.65))
-    hard_signal = (a.backing > 0 or any(b["record"].trusted for b in a.smart_buys)
+    hard_signal = (real > 0 or any(b["record"].trusted for b in a.smart_buys)
                    or (a.chart is not None and (a.chart.quality or 0) >= 0.6))
     rug_ok = a.rug_prob is None or a.rug_prob < float(acfg.get("ai_pick_max_rug_prob", 0.4))
     if a.ml_prob is not None and a.ml_prob >= prob_min and hard_signal and rug_ok:
         return True, f"AI pick ({a.ml_prob:.0%})"
-    return False, f"backing {a.backing} < {acfg.get('min_backing_to_alert', 1.0)}"
+    return False, f"backing {real} < {acfg.get('min_backing_to_alert', 1.0)}" + (
+        f" (+{round(a.backing - real, 2)} from random X posters, which doesn't count)" if a.backing > real else "")
+
+
+def real_backing(a: Assessment) -> float:
+    """Backing without the 'other X posters' part (anyone can post a CA)."""
+    shill = sum(p for label, p in a.backing_breakdown if label.endswith("other X poster(s)"))
+    return round(a.backing - max(0.0, shill), 2)

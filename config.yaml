@@ -109,8 +109,11 @@ alerts:
   min_backing_to_alert: 1.0                # backing / official confirmation / proven AI pick trigger alerts
   ai_pick_min_prob: 0.65                   # AI pick: model's chance of hitting the target
   ai_pick_max_rug_prob: 0.4                # ...and the rug spotter must rate it below this
-  danger_alert_sources: [x, telegram, fomo, manual]
+  # Warnings about unsafe (DANGER / UNCHECKED) coins people are posting. Off: most are scams and
+  # they flood the phone. They are still recorded and learned from. e.g. [manual] to get them for `check`.
+  danger_alert_sources: []
   exit_warnings: true
+  daily_report: true                       # one quiet "is it learning?" report a day (after 18:00 UTC)
   monitor_hours: 48
   source_down_after_failures: 5
 

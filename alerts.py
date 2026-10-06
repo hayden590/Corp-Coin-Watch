@@ -285,7 +285,7 @@ def format_exit_warning(chain: str, address: str, title: str, flags: list[tuple[
 
 NTFY_STYLE = {  # kind -> (priority 1-5, emoji tag)
     "EXIT": (5, "warning"), "VERIFIED": (4, "green_circle"), "UNCONFIRMED": (4, "yellow_circle"),
-    "DANGER": (3, "rotating_light"), "UNCHECKED": (3, "grey_question"),
+    "DANGER": (3, "rotating_light"), "UNCHECKED": (3, "grey_question"), "REPORT": (2, "bar_chart"),
 }
 
 
@@ -369,6 +369,16 @@ class Alerter:
         text = f"⚙️ corp-coin-watch: {message}"
         await self._deliver(text, {"content": _clip(text, 1900), "allowed_mentions": {"parse": []}}, html.escape(text))
         self.db.record_alert("-", "-", "system", None, [], {"message": message})
+
+    async def send_report(self, title: str, body: str) -> None:
+        """Quiet daily summary (low priority on the phone, no buy link)."""
+        text = f"📊 {title}\n{body}"
+        sent = []
+        if self.use_ntfy and await self._ntfy(title, body, None, [], "REPORT"):
+            sent.append("ntfy")
+        sent += await self._deliver(text, {"content": _clip(text, 1900), "allowed_mentions": {"parse": []}},
+                                    html.escape(text))
+        self.db.record_alert("-", "-", "report", None, sent, {"title": title})
 
     async def _ntfy(self, title: str, body: str, click: str | None, buttons: list[tuple[str, str]],
                     kind: str | None) -> bool:

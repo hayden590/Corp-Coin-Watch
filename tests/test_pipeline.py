@@ -9,10 +9,10 @@ from pipeline import Pipeline
 from tests.helpers import cfg, run
 
 
-def make_pipe(transport=None):
+def make_pipe(transport=None, **overrides):
     db = DB()
     http = Http({}, transport=transport or SampleTransport(), base_backoff=0.001, default_per_minute=100_000)
-    return Pipeline(cfg(), db, http, Secrets(), console_only=True), db
+    return Pipeline(cfg(**overrides), db, http, Secrets(), console_only=True), db
 
 
 def test_dry_run_end_to_end(capsys):
@@ -25,14 +25,22 @@ def test_dry_run_end_to_end(capsys):
     assert "FeedRug" not in out
 
 
-def test_dex_feed_only_danger_not_alerted_but_social_one_is():
-    pipe, db = make_pipe()
+def test_dex_feed_only_danger_not_alerted_but_social_one_is_when_enabled():
+    pipe, db = make_pipe(alerts={"danger_alert_sources": ["x", "telegram", "fomo", "manual"]})
     results = run(pipe.poll_dex())
     feedrug = next(r for r in results if r.address.startswith("755R"))
     assert feedrug.verdict.label == "DANGER" and feedrug.status == "not_alerted"
     # Now someone shills it on Telegram -> DANGER alert goes out
     r = run(pipe.process_text("buy 755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk", "telegram", "m1"))[0]
     assert r.status == "alerted"
+
+
+def test_scam_warnings_are_off_by_default():
+    pipe, db = make_pipe()
+    run(pipe.poll_dex())
+    r = run(pipe.process_text("buy 755RjdyG83PHKNB43kAbCgBRNg4tr4fUaM9KoL7oRKbk", "telegram", "m1"))[0]
+    assert r.verdict.label == "DANGER" and r.status == "not_alerted"
+    assert db.q1("SELECT COUNT(*) AS n FROM feature_snapshots WHERE address LIKE '755R%'")["n"] == 1  # still learned from
 
 
 def test_pair_link_resolves_to_token_and_records_both():

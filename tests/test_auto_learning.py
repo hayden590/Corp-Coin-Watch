@@ -130,3 +130,51 @@ def test_discovery_retries_a_winner_when_helius_was_unavailable():
          "VALUES ('solana', ?, '1h', ?, 2.5, -0.1, 1.8, 0)", (TOKEN, time.time()))
     assert run(w.discover()) == []
     assert not db.q1("SELECT 1 FROM seen_items WHERE source = 'wallet_mine'")  # not marked: retried next run
+
+
+def test_random_x_posters_alone_never_trigger_an_alert():
+    r = SafetyReport("solana", "A")
+    r.add("liquidity", PASS, "")
+    a = Assessment("solana", "A", r)
+    a.verdict = Verdict("UNCONFIRMED")
+    a.backing, a.backing_breakdown = 1.0, [("5 other X poster(s)", 1.0)]
+    c = {"alerts": {"min_backing_to_alert": 1.0}}
+    ok, why = should_alert(a, {"x"}, c)
+    assert not ok and "random X posters" in why
+    a.backing, a.backing_breakdown = 2.0, [("5 other X poster(s)", 1.0), ("telegram Alpha Calls", 1.0)]
+    assert should_alert(a, {"x", "telegram"}, c) == (True, "backing 1.0")
+
+
+def test_daily_learning_report_reads_like_a_progress_check(tmp_path):
+    from backtest import engine
+    from dryrun import synthetic_history
+    from papertrade import learning_summary
+
+    db = DB()
+    synthetic_history(db, n=180)
+    engine.run(db, cfg(), tmp_path / "model.pkl")
+    title, body = learning_summary(db, tmp_path / "model.pkl", cfg())
+    assert "learning report" in title
+    assert "Studied 180 coins" in body and "Winner-finder AI: test score" in body and "Rug-spotter AI" in body
+    assert "Paper trades" in body and "no real money" in body
+
+
+def test_daily_report_goes_out_once_a_day_as_a_quiet_ntfy_message():
+    from config import Secrets
+    from monitor import Monitor
+    from pipeline import Pipeline
+
+    posts = []
+
+    def handler(req):
+        import json as _json
+        posts.append(_json.loads(req.content))
+        return httpx.Response(200, json={})
+
+    c = cfg(alerts={"daily_report_hour": 0, "desktop": False})
+    pipe = Pipeline(c, DB(), http_with(handler), Secrets(ntfy_topic="ccw-test"))
+    mon = Monitor(pipe, c)
+    run(mon._daily_report())
+    run(mon._daily_report())
+    assert len(posts) == 1 and posts[0]["priority"] == 2 and "learning report" in posts[0]["title"]
+    assert "click" not in posts[0]  # a report never carries a buy link

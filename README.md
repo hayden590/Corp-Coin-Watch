@@ -144,7 +144,7 @@ python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
 python main.py test-notify        # send a sample alert
-python -m pytest                  # 197 tests
+python -m pytest                  # 201 tests
 ```
 
 ## How a coin is judged
@@ -191,6 +191,12 @@ python -m pytest                  # 197 tests
 
    Nothing overrides DANGER. Only backing or an official confirmation can trigger
    an alert; connection, chart and text scores can't on their own.
+   - Random X accounts posting the CA never count toward an alert: that is what a coordinated
+     shill looks like. Only proven accounts, channels and wallets do.
+   - DANGER / UNCHECKED coins are recorded and learned from but **not sent to your phone** by
+     default (`alerts.danger_alert_sources: []`). Add sources there to get those warnings.
+   - Once a day (after 18:00 UTC) a quiet **learning report** arrives: coins studied, how both AIs
+     score on unseen coins, and how the fake-money trades went. Turn it off with `alerts.daily_report: false`.
 10. **Follow-up.** For 48h after an alert, the bot sends **EXIT WARNING** alerts
     for any of these:
     - dev selling
