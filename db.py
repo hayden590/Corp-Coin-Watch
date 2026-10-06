@@ -254,6 +254,14 @@ MIGRATIONS: list[str] = [
         UNIQUE (strategy, chain, address)
     );
     """,
+    # 3: early buyers noted while a rising coin is still young (cheap to fetch then), for wallet discovery
+    """
+    CREATE TABLE early_buyers (
+        chain TEXT NOT NULL, token TEXT NOT NULL, wallet TEXT NOT NULL, at REAL NOT NULL, tx TEXT,
+        PRIMARY KEY (chain, token, wallet)
+    );
+    CREATE INDEX idx_sightings_source ON sightings(source, seen_at);
+    """,
 ]
 
 

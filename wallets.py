@@ -54,15 +54,16 @@ class HeliusBudget:
     Every Helius call in the bot goes through this daily cap so the free tier never runs dry."""
 
     limit = 300
+    reserve = 60   # kept back for wallet discovery: routine checks stop when only this much is left
     _day = ""
     used = 0
 
     @classmethod
-    def take(cls) -> bool:
+    def take(cls, keep: int = 0) -> bool:
         day = time.strftime("%Y-%m-%d", time.gmtime())
         if day != cls._day:
             cls._day, cls.used = day, 0
-        if cls.used >= cls.limit:
+        if cls.used >= cls.limit - keep:
             return False
         cls.used += 1
         return True
@@ -73,9 +74,11 @@ class HeliusBudget:
 
 
 async def helius_transactions(http: Http, api_key: str, address: str, tx_type: str | None = "SWAP",
-                              limit: int = 100, before: str | None = None) -> list[dict] | None:
-    if not HeliusBudget.take():
-        log.info("Helius daily budget (%d calls) used up - skipping until tomorrow (UTC)", HeliusBudget.limit)
+                              limit: int = 100, before: str | None = None, discovery: bool = False) -> list[dict] | None:
+    """discovery=True may use the reserved part of the daily budget; routine checks may not."""
+    if not HeliusBudget.take(0 if discovery else HeliusBudget.reserve):
+        log.debug("Helius daily budget (%d calls) used up for %s - skipping until tomorrow (UTC)",
+                  HeliusBudget.limit, "discovery" if discovery else "routine checks")
         return None
     params = {"api-key": api_key, "limit": limit}
     if tx_type:
@@ -143,6 +146,7 @@ class Wallets:
         self.etherscan_key = etherscan_key
         self._warned: set[str] = set()
         HeliusBudget.limit = int(self.cfg.get("helius_daily_calls", 300))
+        HeliusBudget.reserve = int(self.cfg.get("discover_reserve_calls", 60))
 
     # --- registry -------------------------------------------------------------
     def sync(self, cfg: dict, fomo_wallets: list[dict] | None = None) -> int:
@@ -238,15 +242,19 @@ class Wallets:
             self.store(wallet, chain, act)
 
     # --- auto-discovery of smart wallets ---------------------------------------
-    async def early_buyers(self, pool: str, token: str, since: float) -> list[tuple[str, float, str]]:
+    async def early_buyers(self, pool: str, token: str, since: float,
+                           max_pages: int | None = None) -> list[tuple[str, float, str]] | None:
         """Wallets that bought `token` early, after the snipe bots (first `snipe_skip_seconds`) and
-        within `early_window_minutes` of when the bot first saw the coin. Returns (wallet, ts, tx)."""
+        within `early_window_minutes` of when the bot first saw the coin. Returns (wallet, ts, tx),
+        or None if Helius couldn't be asked (budget / outage) so the coin can be retried."""
         skip = float(self.cfg.get("snipe_skip_seconds", 60))
         window = float(self.cfg.get("early_window_minutes", 30)) * 60
         txs: list[dict] = []
         before = None
-        for _ in range(int(self.cfg.get("discover_max_pages", 6))):
-            page = await helius_transactions(self.http, self.helius_key, pool, "SWAP", 100, before)
+        for i in range(int(max_pages or self.cfg.get("discover_max_pages", 6))):
+            page = await helius_transactions(self.http, self.helius_key, pool, "SWAP", 100, before, discovery=True)
+            if page is None and i == 0:
+                return None
             if not page:
                 break
             txs += page
@@ -280,12 +288,22 @@ class Wallets:
                GROUP BY o.address ORDER BY g DESC""", (gain, time.time() - 2 * 86400))
         added, coins = [], 0
         for r in rows:
-            if coins >= int(self.cfg.get("discover_coins_per_run", 2)) or HeliusBudget.left() < 20:
-                break
-            if not self.db.mark_seen("wallet_mine", r["address"]):
-                continue
-            coins += 1
-            buyers = await self.early_buyers(r["pair_address"], r["address"], r["first_seen_at"])
+            if self.db.q1("SELECT 1 FROM seen_items WHERE source = 'wallet_mine' AND item_id = ?", (r["address"],)):
+                continue  # each winner is mined once
+            # Buyers noted while the coin was young cost nothing now; otherwise ask Helius (rarely reaches
+            # back far enough on a busy coin, hence the early capture).
+            noted = self.db.q("SELECT wallet, at, tx FROM early_buyers WHERE chain = 'solana' AND token = ? ORDER BY at",
+                              (r["address"],))
+            if noted:
+                buyers = [(n["wallet"], n["at"], n["tx"]) for n in noted]
+            else:
+                if coins >= int(self.cfg.get("discover_coins_per_run", 2)) or HeliusBudget.left() < 20:
+                    continue
+                coins += 1
+                buyers = await self.early_buyers(r["pair_address"], r["address"], r["first_seen_at"])
+                if buyers is None:
+                    continue  # Helius unavailable: try this coin again next run
+            self.db.mark_seen("wallet_mine", r["address"])
             for wallet, ts, tx in buyers[: int(self.cfg.get("buyers_per_coin", 10))]:
                 new = self.db.x("INSERT OR IGNORE INTO wallets (wallet, chain, label, source) VALUES (?, 'solana', ?, 'auto')",
                                 (wallet, f"auto: early in ${r['symbol'] or '?'}"))
@@ -297,6 +315,31 @@ class Wallets:
                      len(buyers), len([b for b in buyers if b[0] in added]))
         self.prune_auto()
         return added
+
+    async def capture_early(self, chain: str, token: str) -> int:
+        """At the 15-minute check, note the early buyers of a coin that is already rising, while its
+        history is still short enough to fetch cheaply. If it later runs, discover() uses them."""
+        if chain != "solana" or not self.helius_key or not self.cfg.get("auto_discover", True):
+            return 0
+        o = self.db.q1("SELECT max_gain, rugged FROM outcomes WHERE chain = ? AND address = ? AND horizon = '15m'",
+                       (chain, token))
+        if not o or o["rugged"] or (o["max_gain"] or 0) < float(self.cfg.get("capture_gain_pct", 30)) / 100:
+            return 0
+        day_start = time.time() - time.time() % 86400
+        done_today = self.db.q1("SELECT COUNT(*) AS n FROM seen_items WHERE source = 'early_capture' AND seen_at >= ?",
+                                (day_start,))["n"]
+        if done_today >= int(self.cfg.get("captures_per_day", 15)):
+            return 0
+        tok = self.db.q1("SELECT pair_address FROM tokens WHERE chain = ? AND address = ?", (chain, token))
+        snap = self.db.q1("SELECT first_seen_at FROM feature_snapshots WHERE chain = ? AND address = ?", (chain, token))
+        if not tok or not tok["pair_address"] or not snap or not self.db.mark_seen("early_capture", token):
+            return 0
+        buyers = await self.early_buyers(tok["pair_address"], token, snap["first_seen_at"],
+                                         max_pages=int(self.cfg.get("capture_pages", 3)))
+        for wallet, ts, tx in buyers or []:
+            self.db.x("INSERT OR IGNORE INTO early_buyers (chain, token, wallet, at, tx) VALUES (?, ?, ?, ?, ?)",
+                      (chain, token, wallet, ts, tx))
+        return len(buyers or [])
 
     def prune_auto(self) -> int:
         """Keep at most max_auto_wallets auto-found wallets: drop the ones with the worst records."""

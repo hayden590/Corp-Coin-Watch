@@ -86,6 +86,11 @@ class XClient(Protocol):
     async def status(self) -> dict[str, Any]: ...
 
 
+def pages_for(limit: int, page_size: int = 20) -> int:
+    """X returns ~20 tweets per request, so asking for 25 costs two requests of X's rate limit."""
+    return max(1, -(-int(limit) // page_size))
+
+
 class XUnavailable(Exception):
     """All X accounts are locked/down (or the hourly budget is spent - see subclass)."""
 
@@ -192,11 +197,13 @@ class TwscrapeClient:
             raise XUnavailable(str(exc)) from exc
 
     async def search(self, query: str, limit: int) -> list[XTweet]:
-        items = await self._collect(self.api.search(query, limit=limit, kv={"product": "Latest"}), limit, 1)
+        items = await self._collect(self.api.search(query, limit=limit, kv={"product": "Latest"}), limit,
+                                    pages_for(limit))
         return [tweet_from_twscrape(t) for t in items]
 
     async def user_tweets(self, user_id: str, limit: int) -> list[XTweet]:
-        items = await self._collect(self.api.user_tweets_and_replies(int(user_id), limit=limit), limit, 1)
+        items = await self._collect(self.api.user_tweets_and_replies(int(user_id), limit=limit), limit,
+                                    pages_for(limit))
         return [tweet_from_twscrape(t) for t in items]
 
     async def user_by_id(self, user_id: str) -> XUser | None:

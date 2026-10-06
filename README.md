@@ -144,7 +144,7 @@ python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
 python main.py test-notify        # send a sample alert
-python -m pytest                  # 188 tests
+python -m pytest                  # 197 tests
 ```
 
 ## How a coin is judged
@@ -246,6 +246,11 @@ python -m pytest                  # 188 tests
 - **Outcomes.** Every coin is snapshotted when first seen (all features, scores and
   verdict). Its outcome is recorded at 15m, 1h, 6h and 24h: max gain, max
   drawdown, and whether it rugged.
+  - Only price moves *after* the entry count. The candle already running when the coin was first seen
+    is left out, because its high may have come before anyone could buy.
+  - If the bot falls behind, late early checks are skipped and filled in from the 24h price path.
+  - Coins already up 30% at 15 minutes get their early buyers noted (up to 15 a day). If the coin then
+    runs, those buyers become candidate smart wallets.
 - **`backtest`**
   - Replays the `strategies:` from `config.yaml` with fees and slippage.
   - Always splits by **time**: it trains on older coins and tests on newer ones.

@@ -82,3 +82,51 @@ def test_untrusted_model_is_ignored():
     assert not m.trustworthy()
     m.test_auc, m.n_train = 0.7, 400
     assert m.trustworthy()
+
+
+def test_routine_checks_leave_the_reserve_for_discovery():
+    HeliusBudget.limit, HeliusBudget.reserve, HeliusBudget._day, HeliusBudget.used = 5, 3, "", 0
+    assert HeliusBudget.take(HeliusBudget.reserve) and HeliusBudget.take(HeliusBudget.reserve)
+    assert not HeliusBudget.take(HeliusBudget.reserve)       # fees / polling stop here
+    assert HeliusBudget.take(0) and HeliusBudget.take(0) and HeliusBudget.take(0)  # discovery can still go
+    assert not HeliusBudget.take(0)
+    HeliusBudget.limit, HeliusBudget.reserve, HeliusBudget.used = 300, 60, 0
+
+
+def test_rising_coin_gets_its_early_buyers_noted_and_discovery_uses_them_without_helius():
+    first = time.time() - 900
+    txs = [fake_swap_tx("sniper", first + 5, "s1"), fake_swap_tx("early1", first + 120, "s2")]
+    calls = []
+
+    def handler(req):
+        calls.append(req.url)
+        return httpx.Response(200, json=list(reversed(txs)))
+
+    HeliusBudget._day, HeliusBudget.used = "", 0
+    db = DB()
+    w = Wallets(db, http_with(handler), cfg(), "key")
+    db.x("INSERT INTO feature_snapshots VALUES ('solana', ?, 0, ?, 1.0, 'UNCONFIRMED', '{}')", (TOKEN, first))
+    db.upsert_token("solana", TOKEN, pair_address=POOL, symbol="GCAT")
+    db.x("INSERT INTO outcomes (chain, address, horizon, recorded_at, max_gain, max_drawdown, final_return, rugged) "
+         "VALUES ('solana', ?, '15m', ?, 0.1, -0.1, 0.05, 0)", (TOKEN, time.time()))
+    assert run(w.capture_early("solana", TOKEN)) == 0 and not calls  # only +10%: not worth a Helius call
+    db.x("UPDATE outcomes SET max_gain = 0.6 WHERE address = ?", (TOKEN,))
+    assert run(w.capture_early("solana", TOKEN)) == 1                 # early1 noted, sniper skipped
+    assert run(w.capture_early("solana", TOKEN)) == 0                 # once per coin
+    n_calls = len(calls)
+    db.x("INSERT INTO outcomes (chain, address, horizon, recorded_at, max_gain, max_drawdown, final_return, rugged) "
+         "VALUES ('solana', ?, '6h', ?, 3.0, -0.1, 2.0, 0)", (TOKEN, time.time()))
+    assert run(w.discover()) == ["early1"] and len(calls) == n_calls  # it ran: wallet added, no new Helius call
+
+
+def test_discovery_retries_a_winner_when_helius_was_unavailable():
+    first = time.time() - 7200
+    HeliusBudget._day, HeliusBudget.used = "", 0
+    db = DB()
+    w = Wallets(db, http_with(lambda r: httpx.Response(503)), cfg(), "key")  # Helius down
+    db.x("INSERT INTO feature_snapshots VALUES ('solana', ?, 0, ?, 1.0, 'UNCONFIRMED', '{}')", (TOKEN, first))
+    db.upsert_token("solana", TOKEN, pair_address=POOL, symbol="GCAT")
+    db.x("INSERT INTO outcomes (chain, address, horizon, recorded_at, max_gain, max_drawdown, final_return, rugged) "
+         "VALUES ('solana', ?, '1h', ?, 2.5, -0.1, 1.8, 0)", (TOKEN, time.time()))
+    assert run(w.discover()) == []
+    assert not db.q1("SELECT 1 FROM seen_items WHERE source = 'wallet_mine'")  # not marked: retried next run

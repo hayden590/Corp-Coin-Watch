@@ -11,7 +11,7 @@ from papertrade import PaperTrader, qualify
 from safety import PASS, SafetyReport
 from scoring import Assessment, Verdict
 from sources.dex_source import MarketInfo
-from tests.helpers import cfg
+from tests.helpers import cfg, run
 
 COSTS = {"fee_pct": 0, "slippage_pct": 0}
 
@@ -146,3 +146,73 @@ def test_retrain_runs_in_a_worker_thread_with_its_own_connection(tmp_path):
     m.db, m.cfg, m.pipe = db, cfg(), P
     asyncio.run(asyncio.to_thread(m._retrain))  # raised sqlite3.ProgrammingError before the fix
     assert P.paper._ml_loaded_at == 0
+
+
+def test_outcome_ignores_the_candle_already_running_when_we_first_saw_the_coin():
+    # Candle opened at 0 (before entry at 100) spiked to 3.0, then the coin bled out after entry.
+    candles = [(0, 2.0, 3.0, 1.0, 1.0, 0), (300, 1.0, 1.1, 0.8, 0.9, 0), (600, 0.9, 0.95, 0.6, 0.7, 0)]
+    res = compute(1.0, candles, 100, 1000)
+    assert round(res["max_gain"], 2) == 0.1 and round(res["max_drawdown"], 2) == -0.4  # the pre-entry spike doesn't count
+
+
+def test_old_recorded_paths_are_trimmed_to_after_entry_before_labelling():
+    db = DB()
+    db.x("""INSERT INTO feature_snapshots (chain, address, taken_at, first_seen_at, entry_price, verdict, features_json)
+            VALUES ('solana', 'A', 120, 100, 1.0, 'UNCONFIRMED', '{}')""")
+    path = [[0, 3.0, 1.0, 1.0], [300, 1.1, 0.6, 0.65], [600, 0.7, 0.5, 0.5]]  # stored by the old code
+    db.x("""INSERT INTO outcomes (chain, address, horizon, recorded_at, max_gain, max_drawdown, final_return, rugged,
+            path_json) VALUES ('solana', 'A', '24h', 0, 2.0, -0.5, -0.5, 0, ?)""", (json.dumps(path),))
+    (row,) = engine.load_rows(db)
+    assert row["path"] == path[1:] and row["entry_time"] == 120
+    assert engine.label(row, 50, 30) == 0  # with the old path this was a "win" it could never have caught
+    assert engine.label({**row, "path": None}, 50, 30) is None  # no path: unknown, not guessed
+
+
+def test_similar_stats_are_cached_instead_of_reloading_all_history_per_coin():
+    db = DB()
+    synthetic_history(db, n=60)
+    engine._similar_cache.clear()
+    first = engine.similar_stats(db, "UNCONFIRMED", 1.0, "solana", cfg())
+    db.x("DELETE FROM outcomes")
+    assert engine.similar_stats(db, "UNCONFIRMED", 1.0, "solana", cfg()) == first  # served from the cache
+    engine._similar_cache.clear()
+
+
+class FakeDex:
+    async def token_pairs(self, address):
+        return []
+
+
+class FakeCharts:
+    def __init__(self, candles):
+        self.candles, self.calls = candles, 0
+
+    async def path_since(self, chain, pool, token, since):
+        self.calls += 1
+        return self.candles
+
+
+def test_late_early_horizons_are_skipped_then_filled_in_from_the_24h_path():
+    from backtest.outcomes import record_outcome
+
+    db = DB()
+    first = time.time() - 30 * 3600
+    db.x("""INSERT INTO feature_snapshots (chain, address, taken_at, first_seen_at, entry_price, verdict, features_json)
+            VALUES ('solana', 'A', ?, ?, 1.0, 'UNCONFIRMED', '{}')""", (first, first))
+    candles = [(first + k * 900, 1, 1 + k * 0.1, 0.9, 1 + k * 0.1, 0) for k in range(96)]
+    charts = FakeCharts(candles)
+    late = {"payload": json.dumps({"horizon": "1h"}), "chain": "solana", "address": "A"}
+    assert "late" in run(record_outcome(db, late, FakeDex(), charts)) and charts.calls == 0  # no API call spent
+    day = {"payload": json.dumps({"horizon": "24h"}), "chain": "solana", "address": "A"}
+    run(record_outcome(db, day, FakeDex(), charts))
+    got = {r["horizon"]: r["max_gain"] for r in db.q("SELECT horizon, max_gain FROM outcomes")}
+    assert set(got) == {"15m", "1h", "6h", "24h"}
+    assert round(got["1h"], 1) == 0.4 and got["24h"] > got["6h"] > got["1h"]
+
+
+def test_models_trained_on_old_labels_are_not_trusted():
+    m = engine.MLModel(None, [], {}, "gb")
+    m.test_auc, m.n_train = 0.8, 3000
+    assert m.trustworthy()
+    del m.label_version  # what a model pickled before the fix looks like
+    assert not m.trustworthy()

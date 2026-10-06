@@ -1,7 +1,8 @@
 """Snapshot every tracked CA at its first full assessment (all features, scores,
 verdict, price), then record outcomes at 15m / 1h / 6h / 24h after first sighting:
 max gain, max drawdown, final return, rugged y/n (liquidity -80% or honeypot).
-The 24h outcome keeps the price path so strategies can be replayed exactly.
+The 24h outcome keeps the price path so strategies can be replayed exactly, and
+fills in any earlier horizon that was skipped because the bot fell behind.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ log = logging.getLogger(__name__)
 
 HORIZONS = {"15m": 900, "1h": 3600, "6h": 6 * 3600, "24h": 24 * 3600}
 RUG_LIQUIDITY_DROP = 0.8
+LATE_SKIP_SECONDS = 2 * 3600  # an early horizon this overdue is filled in from the 24h path instead
 
 
 def snapshot(db: DB, a, first_seen: float) -> bool:
@@ -32,8 +34,10 @@ def snapshot(db: DB, a, first_seen: float) -> bool:
 
 
 def compute(entry: float, candles: list, start: float, end: float) -> dict | None:
-    """candles: (ts, o, h, l, c, v) oldest first."""
-    window = [c for c in candles if start - 900 < c[0] <= end]
+    """candles: (ts, o, h, l, c, v) oldest first, ts = candle OPEN time. Only candles that open at or
+    after the entry count: the candle already running at entry may have made its high / low BEFORE
+    we could have bought, and counting it would teach the AI to "catch" peaks that were already gone."""
+    window = [c for c in candles if start <= c[0] <= end]
     if not window or not entry:
         return None
     hi = max(c[2] for c in window)
@@ -48,9 +52,12 @@ async def record_outcome(db: DB, row, dex, charts) -> str:
     snap = db.q1("SELECT * FROM feature_snapshots WHERE chain = ? AND address = ?", (row["chain"], row["address"]))
     if not snap or not h:
         return "no snapshot"
+    if h != "24h" and time.time() - (snap["first_seen_at"] + HORIZONS[h]) > LATE_SKIP_SECONDS:
+        return f"{h}: late - filled in from the 24h price path"
     entry = snap["entry_price"]
-    start = snap["first_seen_at"]
-    end = start + HORIZONS[h]
+    # The entry price was taken at the snapshot, which can be a little after the first sighting.
+    start = max(snap["first_seen_at"], snap["taken_at"] or 0)
+    end = snap["first_seen_at"] + HORIZONS[h]
     tok = db.q1("SELECT pair_address FROM tokens WHERE chain = ? AND address = ?", (row["chain"], row["address"]))
     pairs = await dex.token_pairs(row["address"])
     from sources.dex_source import best_pair
@@ -86,4 +93,13 @@ async def record_outcome(db: DB, row, dex, charts) -> str:
             rugged, path_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
          (row["chain"], row["address"], h, time.time(), res["max_gain"], res["max_drawdown"], res["final_return"],
           int(rugged), json.dumps(res["path"]) if h == "24h" and res["path"] else None))
+    if h == "24h" and path:
+        # One price path covers every earlier horizon: fill in any that were skipped.
+        for eh, secs in HORIZONS.items():
+            sub = compute(entry, path, start, snap["first_seen_at"] + secs) if eh != "24h" else None
+            if sub:
+                db.x("""INSERT OR IGNORE INTO outcomes (chain, address, horizon, recorded_at, max_gain, max_drawdown,
+                        final_return, rugged) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (row["chain"], row["address"], eh, time.time(), sub["max_gain"], sub["max_drawdown"],
+                      sub["final_return"], int(rugged)))
     return f"{h}: gain {res['max_gain']:+.0%} dd {res['max_drawdown']:+.0%}{' RUGGED' if rugged else ''}"

@@ -172,7 +172,7 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
     print(f"Helius: {'key set' if secrets.helius_api_key else 'no key (Solana wallets + global fees disabled)'}; "
           f"budget {cfg['wallets'].get('helius_daily_calls')} calls/day")
     print("Tracked wallets: " + (", ".join(f"{r['n']} {r['source']}" for r in tracked) or "none yet"))
-    from backtest.engine import MLModel, rug_model_path
+    from backtest.engine import LABEL_VERSION, MLModel, rug_model_path
 
     n_seen = db.q1("SELECT COUNT(*) AS n FROM feature_snapshots")["n"]
     n_done = db.q1("SELECT COUNT(DISTINCT address) AS n FROM outcomes WHERE horizon = '24h'")["n"]
@@ -181,8 +181,12 @@ async def show_health(cfg: dict, secrets: Secrets) -> int:
                             ("AI rug spotter", rug_model_path(MODEL_PATH), "USED to warn / block AI picks")):
         model = MLModel.load(path)
         if model:
+            auc = getattr(model, "test_auc", None)
+            state = (use if model.trustworthy() else
+                     "trained on the old outcome data - off until the next retrain" if getattr(model, "label_version", 1) < LABEL_VERSION
+                     else "not good enough yet, off")
             print(f"{name}: trained on {getattr(model, 'n_train', 0)} coins, test AUC "
-                  f"{getattr(model, 'test_auc', None)} - {use if model.trustworthy() else 'not good enough yet, off'}")
+                  f"{round(auc, 2) if auc is not None else None} - {state}")
         else:
             print(f"{name}: not trained yet (needs history - retrains daily)")
     fomo_url = (cfg.get("fomo") or {}).get("leaderboard_url")

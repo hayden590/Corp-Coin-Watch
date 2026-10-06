@@ -20,6 +20,7 @@ import logging
 import math
 import pickle
 import statistics
+import time
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,9 @@ SIGNALS = [
     "text_bot_like", "creator_confirmed", "hijack_flags", "tier1_followers",
 ]
 RUG_CRASH = 0.9
+# 2: outcomes only count price moves after the entry (v1 also counted the candle already running when
+# the coin was first seen, which made some already-gone peaks look catchable).
+LABEL_VERSION = 2
 NOT_SIGNALS = {"verdict_rank"}  # the verdict is our own rule output, not something to learn from twice
 
 
@@ -51,15 +55,22 @@ def signal_keys(rows: list[dict]) -> list[str]:
 # --- data --------------------------------------------------------------------
 
 def load_rows(db: DB) -> list[dict]:
+    outcomes: dict[tuple[str, str], dict] = {}
+    for o in db.q("SELECT * FROM outcomes"):  # one query, not one per coin
+        o = dict(o)
+        outcomes.setdefault((o["chain"], o["address"]), {})[o["horizon"]] = o
     rows = []
     for s in db.q("SELECT * FROM feature_snapshots ORDER BY first_seen_at"):
-        outs = {o["horizon"]: dict(o) for o in db.q("SELECT * FROM outcomes WHERE chain = ? AND address = ?",
-                                                     (s["chain"], s["address"]))}
+        outs = outcomes.get((s["chain"], s["address"]))
         if not outs:
             continue
+        # Only price moves AFTER we could have bought count (older outcomes also stored the candle
+        # that was already running when the coin was first seen).
+        entry_time = max(s["first_seen_at"], s["taken_at"] or 0)
         path = json.loads(outs["24h"]["path_json"]) if outs.get("24h") and outs["24h"].get("path_json") else None
+        path = [p for p in path if p[0] >= entry_time] or None if path else None
         rows.append({"chain": s["chain"], "address": s["address"], "first_seen": s["first_seen_at"],
-                     "entry_price": s["entry_price"], "verdict": s["verdict"],
+                     "entry_time": entry_time, "entry_price": s["entry_price"], "verdict": s["verdict"],
                      "features": json.loads(s["features_json"]), "outcomes": outs, "path": path})
     return rows
 
@@ -139,7 +150,10 @@ def pick_outcome(outcomes: dict, hold_s: float) -> dict | None:
 
 
 def label(row: dict, tp_pct: float, sl_pct: float) -> int | None:
-    """1 = hit +TP% before -SL% within 24h, 0 = didn't, None = unknown."""
+    """1 = hit +TP% before -SL% within 24h, 0 = didn't, None = unknown. Needs the recorded price
+    path: the summary numbers can't tell which came first."""
+    if not row.get("path"):
+        return None
     r = simulate(row, {"take_profit_pct": tp_pct, "stop_loss_pct": sl_pct, "max_hold_hours": 24},
                  {"slippage_pct": 0, "fee_pct": 0})
     if r is None:
@@ -152,7 +166,12 @@ def rug_label(row: dict, tp_pct: float = 0, sl_pct: float = 0) -> int | None:
     dump doesn't pull liquidity), 0 = didn't, None = not known yet."""
     outs = row["outcomes"].values()
     vals = [o.get("rugged") for o in outs if o.get("rugged") is not None]
-    if any(vals) or any((o.get("max_drawdown") or 0) <= -RUG_CRASH for o in outs):
+    entry = row.get("entry_price")
+    if row.get("path") and entry:
+        crashed = min(p[2] for p in row["path"]) / entry - 1 <= -RUG_CRASH
+    else:
+        crashed = any((o.get("max_drawdown") or 0) <= -RUG_CRASH for o in outs)
+    if any(vals) or crashed:
         return 1
     if not vals:
         return None
@@ -260,10 +279,13 @@ class MLModel:
         self.model, self.keys, self.medians, self.kind = model, keys, medians, kind
         self.test_auc: float | None = None   # measured on newer coins it never trained on
         self.n_train = 0
+        self.label_version = LABEL_VERSION
 
     def trustworthy(self, min_auc: float = 0.6, min_train: int = 150) -> bool:
-        """Only let the model drive alerts once it has proven itself out-of-sample."""
-        return (getattr(self, "test_auc", None) or 0) >= min_auc and getattr(self, "n_train", 0) >= min_train
+        """Only let the model drive alerts once it has proven itself out-of-sample, on labels made the
+        current way (models trained before a labelling fix are ignored until the next retrain)."""
+        return (getattr(self, "label_version", 1) >= LABEL_VERSION
+                and (getattr(self, "test_auc", None) or 0) >= min_auc and getattr(self, "n_train", 0) >= min_train)
 
     def vector(self, f: dict) -> list[float]:
         return [float(f[k]) if isinstance(f.get(k), (int, float)) else self.medians[k] for k in self.keys]
@@ -382,12 +404,31 @@ def rug_model_path(model_path: Path) -> Path:
     return Path(model_path).with_name("rug_model.pkl")
 
 
+_similar_cache: dict[str, tuple[float, list[tuple]]] = {}
+SIMILAR_CACHE_SECONDS = 1800
+
+
+def _similar_rows(db: DB, tp: float, sl: float) -> list[tuple]:
+    """(verdict, chain, backing, label) for every coin with an outcome. Rebuilt at most every 30 min:
+    it's needed for every new coin and loading all history each time would swamp a small server."""
+    key = f"{getattr(db, 'path', id(db))}:{tp}:{sl}"
+    hit = _similar_cache.get(key)
+    if hit and time.time() - hit[0] < SIMILAR_CACHE_SECONDS:
+        return hit[1]
+    compact = []
+    for r in load_rows(db):
+        y = label(r, tp, sl)
+        if y is not None:
+            compact.append((r["verdict"], r["chain"], r["features"].get("backing") or 0, y))
+    _similar_cache[key] = (time.time(), compact)
+    return compact
+
+
 def similar_stats(db: DB, verdict: str, backing: float, chain: str, cfg: dict, min_n: int = 10) -> dict:
     bt = cfg.get("backtest") or {}
     tp, sl = bt.get("take_profit_pct", 50), bt.get("stop_loss_pct", 30)
-    rows = [r for r in load_rows(db) if r["verdict"] == verdict and r["chain"] == chain
-            and abs((r["features"].get("backing") or 0) - backing) <= 1.0]
-    labels = [y for y in (label(r, tp, sl) for r in rows) if y is not None]
+    labels = [y for v, c, b, y in _similar_rows(db, tp, sl)
+              if v == verdict and c == chain and abs(b - backing) <= 1.0]
     if len(labels) < min_n:
         return {"n": len(labels), "text": f"not enough history yet (n={len(labels)})"}
     rate = sum(labels) / len(labels)

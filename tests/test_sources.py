@@ -176,3 +176,9 @@ def test_x_cookie_accounts_parse_with_semicolons(tmp_path, monkeypatch):
     n = run(xs.add_accounts_from_env(tmp_path / "x.db", "",
                                      "burner1=auth_token=abc123; ct0=def456 | burner2=auth_token=zzz; ct0=yyy"))
     assert n == 2 and added[0] == ("burner1", "auth_token=abc123; ct0=def456") and added[1][0] == "burner2"
+
+
+def test_x_budget_counts_every_page_a_search_costs():
+    from sources.x_source import pages_for
+
+    assert (pages_for(20), pages_for(25), pages_for(40), pages_for(1)) == (1, 2, 2, 1)

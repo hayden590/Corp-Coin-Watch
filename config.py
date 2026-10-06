@@ -48,14 +48,14 @@ DEFAULTS: dict[str, Any] = {
     },
     "x": {
         "queries": ["pump.fun", "dexscreener.com", "CA:", "contract address"],
-        "requests_per_hour": 150,
+        "requests_per_hour": 100,     # X rate-limits burners well before its published limits
         "search_limit": 20,
         "watch_limit": 20,
         "snapshot_hours": 24,
         "no_account_cooldown_minutes": 15,
         "pace": 1.0,
-        "chatter_limit": 25,
-        "chatter_budget_share": 0.5,   # ordinary coins only get X chatter while under half the hourly budget
+        "chatter_limit": 20,          # one X page
+        "chatter_budget_share": 0.3,   # ordinary coins only get X chatter while under 30% of the hourly budget
     },
     "verify": {
         "persistence_delay_minutes": 15,
@@ -83,6 +83,10 @@ DEFAULTS: dict[str, Any] = {
         "snipe_skip_seconds": 60,
         "early_window_minutes": 30,
         "discover_every_hours": 6,
+        "discover_reserve_calls": 60,  # Helius calls/day kept for discovery (routine checks stop short of it)
+        "capture_gain_pct": 30,        # at 15 min, coins up this much get their early buyers noted
+        "captures_per_day": 15,
+        "capture_pages": 3,
         "poll_minutes": 180,
         "poll_batch": 5,
         "min_history": 10,

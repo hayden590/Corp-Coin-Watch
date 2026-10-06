@@ -34,9 +34,9 @@ fees:
 
 x:
   queries: ["pump.fun", "dexscreener.com", "CA:", "contract address"]
-  requests_per_hour: 150                   # hourly budget across all burner accounts
+  requests_per_hour: 100                   # hourly budget across all burner accounts (X locks burners that go faster)
   no_account_cooldown_minutes: 15
-  chatter_budget_share: 0.5                # reading X chatter on ordinary new coins uses at most half the budget
+  chatter_budget_share: 0.3                # reading X chatter on ordinary new coins uses at most 30% of the budget
 
 verify:
   persistence_delay_minutes: 15            # re-fetch source tweet after this long

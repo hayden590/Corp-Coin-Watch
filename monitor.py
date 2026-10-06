@@ -132,6 +132,8 @@ class Monitor:
             elif kind == "outcome":
                 res = await outcomes.record_outcome(self.db, row, self.pipe.dex, self.pipe.charts)
                 self.db.complete_check(row["id"], res)
+                if res.startswith("15m: gain"):
+                    await self.pipe.wallets.capture_early(row["chain"], row["address"])
             else:
                 self.db.complete_check(row["id"], "unknown kind")
 
