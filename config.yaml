@@ -113,6 +113,7 @@ alerts:
   # they flood the phone. They are still recorded and learned from. e.g. [manual] to get them for `check`.
   danger_alert_sources: []
   exit_warnings: true
+  exit_warnings_only_holdings: true        # only for coins you're in: tap "I bought" on an alert, or send `in <CA>`
   daily_report: true                       # one quiet "is it learning?" report a day (after 18:00 UTC)
   monitor_hours: 48
   source_down_after_failures: 5

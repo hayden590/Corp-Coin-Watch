@@ -21,6 +21,7 @@ from discovery import Discovery
 from extract import Candidate, extract
 from fees import GlobalFees
 from graph import Graph
+from holdings import Holdings
 from net import Http
 from papertrade import PaperTrader
 from safety import FAIL, SafetyChecker, SafetyReport
@@ -65,6 +66,7 @@ class Pipeline:
         self.charts = Charts(db, http, cfg, getattr(secrets, "birdeye_api_key", ""))
         self.text = TextAnalyzer(db, http, cfg, secrets.anthropic_api_key)
         self.paper = PaperTrader(db, cfg, model_path)
+        self.holdings = Holdings(db, cfg)
         self.channels = channel_map(cfg.get("channels") or [])
         self._x_cache: dict[str, tuple[float, list[str]]] = {}
         self.wallets.sync(cfg)
@@ -333,8 +335,12 @@ class Pipeline:
             if self.db.x("INSERT OR IGNORE INTO exit_flags (chain, address, flag, detail, at) VALUES (?, ?, ?, ?, ?)",
                          (chain, address, flag, detail, time.time())):
                 new.append((flag, detail))
-        if new and (self.cfg.get("alerts") or {}).get("exit_warnings", True) \
-                and self.db.last_alert_verdict(chain, address) not in (None, DANGER):
+        acfg = self.cfg.get("alerts") or {}
+        if acfg.get("exit_warnings_only_holdings", True):
+            warn = self.holdings.holds(chain, address)  # only coins you said you're in
+        else:
+            warn = self.db.last_alert_verdict(chain, address) not in (None, DANGER) or self.holdings.holds(chain, address)
+        if new and acfg.get("exit_warnings", True) and warn:
             title = f"{tok['name'] or '?'} (${tok['symbol']})" if tok else address
             if await self.alerter.send_exit_warning(chain, address, title, new, tok["dex_url"] if tok else None):
                 self.db.x("UPDATE exit_flags SET alerted = 1 WHERE chain = ? AND address = ?", (chain, address))

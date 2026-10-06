@@ -262,6 +262,13 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_sightings_source ON sightings(source, seen_at);
     """,
+    # 4: coins the user says they are in (exit warnings only go out for these)
+    """
+    CREATE TABLE holdings (
+        chain TEXT NOT NULL, address TEXT NOT NULL, opened_at REAL NOT NULL, closed_at REAL,
+        PRIMARY KEY (chain, address)
+    );
+    """,
 ]
 
 

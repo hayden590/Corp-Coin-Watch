@@ -144,7 +144,7 @@ python main.py backtest           # replay strategies on recorded history
 python main.py qualify            # paper-trading report card ("NO EDGE FOUND" if it fails)
 python main.py new-ntfy-topic     # private channel for phone + laptop pop-ups
 python main.py test-notify        # send a sample alert
-python -m pytest                  # 201 tests
+python -m pytest                  # 206 tests
 ```
 
 ## How a coin is judged
@@ -197,8 +197,14 @@ python -m pytest                  # 201 tests
      default (`alerts.danger_alert_sources: []`). Add sources there to get those warnings.
    - Once a day (after 18:00 UTC) a quiet **learning report** arrives: coins studied, how both AIs
      score on unseen coins, and how the fake-money trades went. Turn it off with `alerts.daily_report: false`.
-10. **Follow-up.** For 48h after an alert, the bot sends **EXIT WARNING** alerts
-    for any of these:
+10. **Follow-up.** For coins **you're in**, the bot sends **EXIT WARNING** alerts
+    (it tracks every alerted coin for 48h for learning and paper trades, but only warns you about yours).
+    Tell it from the ntfy app:
+    - tap **✅ I bought** on an alert, and **✋ I sold** on an exit warning, or
+    - type `in <contract address>` / `out <contract address>` into your ntfy topic (also `bought` / `sold`).
+    It confirms quietly, stops after 14 days if you forget, and never sees your wallet.
+    Set `alerts.exit_warnings_only_holdings: false` for warnings on every alerted coin.
+    The warnings fire for any of these:
     - dev selling
     - top holders selling
     - liquidity pulled

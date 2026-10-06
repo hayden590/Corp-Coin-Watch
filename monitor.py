@@ -145,8 +145,11 @@ class Monitor:
         hours = float((self.cfg.get("alerts") or {}).get("monitor_hours", 48))
         rows = self.db.q("SELECT chain, address, alerted_at FROM tokens WHERE alerted_at >= ?",
                          (time.time() - hours * 3600,))
-        for r in rows:
-            await self.pipe.follow_up(r["chain"], r["address"], r["alerted_at"])
+        watched = {(r["chain"], r["address"]): r["alerted_at"] for r in rows}
+        for h in self.pipe.holdings.active():  # coins you're in, however long ago they were alerted
+            watched.setdefault((h["chain"], h["address"]), h["opened_at"])
+        for (chain, address), since in watched.items():
+            await self.pipe.follow_up(chain, address, since)
         await self.pipe.paper.update(self.pipe.dex)
 
     async def slow_step(self) -> None:
@@ -228,6 +231,12 @@ class Monitor:
             tasks.append(self.telegram_run())
         else:
             log.info("Telegram source not configured (TELEGRAM_API_ID/HASH + channels.yaml)")
+        secrets = self.pipe.alerter.secrets
+        if self.pipe.alerter.use_ntfy and (self.cfg.get("alerts") or {}).get("holdings_listener", True):
+            import holdings
+
+            tasks.append(holdings.listen(self.pipe, self.pipe.holdings, self.pipe.alerter.ntfy_server,
+                                         secrets.ntfy_topic, getattr(secrets, "ntfy_token", "")))
         if self.fomo:
             tasks.append(self.supervise("fomo", self.fomo_step, lambda: jittered(p.get("fomo_hours", 6) * 3600, j)))
         await asyncio.gather(*tasks)

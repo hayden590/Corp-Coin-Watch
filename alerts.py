@@ -297,8 +297,17 @@ def ntfy_payload(topic: str, title: str, body: str, click: str | None, buttons: 
     p = {"topic": topic, "title": title[:250], "message": body[:1000], "priority": prio, "tags": [tag]}
     if click and click.startswith(("https://", "http://")):
         p["click"] = click
-    actions = [{"action": "view", "label": label, "url": url, "clear": True}
-               for label, url in buttons if url and url.startswith(("https://", "http://"))][:3]
+    actions = []
+    for b in buttons:
+        label, url = b[0], b[1]
+        if not url or not url.startswith(("https://", "http://")):
+            continue
+        if len(b) > 2:  # (label, url, body): a background POST, e.g. "I bought" -> tells the bot
+            actions.append({"action": "http", "label": label, "url": url, "method": "POST", "body": b[2],
+                            "clear": True})
+        else:
+            actions.append({"action": "view", "label": label, "url": url, "clear": True})
+    actions = actions[:3]
     if actions:
         p["actions"] = actions
     return p
@@ -343,7 +352,9 @@ class Alerter:
         if a.verdict.label in self.desktop_kinds:
             title, body = a.desktop()
             desk = (title, body, click_link(a.verdict.label, self.buy_template, a.chain, a.address, a.dex_url))
-        buttons = ([("🛒 Open to buy", a.buy_url)] if a.buy_url else []) + ([("📈 Chart", a.dex_url)] if a.dex_url else [])
+        bought = self.holding_button("✅ I bought", "in", a.chain, a.address) if a.buy_url else None
+        buttons = (([("🛒 Open to buy", a.buy_url)] if a.buy_url else []) + ([bought] if bought else [])
+                   + ([("📈 Chart", a.dex_url)] if a.dex_url else []))
         sent = await self._deliver(format_text(a), format_discord(a), format_telegram(a), desk, buttons, a.verdict.label)
         if not sent:
             return False  # not recorded, so the next pass retries
@@ -359,7 +370,9 @@ class Alerter:
             desk = (f"⚠️ EXIT WARNING {title}", "; ".join(d for _, d in flags)[:200] + ". Click to open the coin.",
                     click_link("EXIT", self.buy_template, chain, address, dex_url))
         sell = buy_link(self.buy_template, chain, address)
-        buttons = ([("💸 Open to sell", sell)] if sell else []) + ([("📈 Chart", dex_url)] if dex_url else [])
+        sold = self.holding_button("✋ I sold", "out", chain, address)
+        buttons = (([("💸 Open to sell", sell)] if sell else []) + ([sold] if sold else [])
+                   + ([("📈 Chart", dex_url)] if dex_url else []))
         sent = await self._deliver(text, discord, tg, desk, buttons, "EXIT")
         if sent:
             self.db.record_alert(chain, address, "exit_warning", None, sent, {"flags": [f for f, _ in flags]})
@@ -370,15 +383,23 @@ class Alerter:
         await self._deliver(text, {"content": _clip(text, 1900), "allowed_mentions": {"parse": []}}, html.escape(text))
         self.db.record_alert("-", "-", "system", None, [], {"message": message})
 
-    async def send_report(self, title: str, body: str) -> None:
-        """Quiet daily summary (low priority on the phone, no buy link)."""
+    def holding_button(self, label: str, action: str, chain: str, address: str) -> tuple[str, str, str] | None:
+        """A notification button that quietly tells the bot you bought / sold this coin."""
+        if not self.use_ntfy:
+            return None
+        from holdings import holdings_topic
+
+        return (label, f"{self.ntfy_server}/{holdings_topic(self.secrets.ntfy_topic)}", f"{action} {chain}:{address}")
+
+    async def send_report(self, title: str, body: str, record_kind: str = "report") -> None:
+        """Quiet message: daily summary, holding confirmations (low priority, no buy link)."""
         text = f"📊 {title}\n{body}"
         sent = []
         if self.use_ntfy and await self._ntfy(title, body, None, [], "REPORT"):
             sent.append("ntfy")
         sent += await self._deliver(text, {"content": _clip(text, 1900), "allowed_mentions": {"parse": []}},
                                     html.escape(text))
-        self.db.record_alert("-", "-", "report", None, sent, {"title": title})
+        self.db.record_alert("-", "-", record_kind, None, sent, {"title": title})
 
     async def _ntfy(self, title: str, body: str, click: str | None, buttons: list[tuple[str, str]],
                     kind: str | None) -> bool:
@@ -417,7 +438,8 @@ class Alerter:
                 "disable_web_page_preview": True,
             }
             # Tap-able buttons on the phone (Telegram only accepts http/https button links).
-            row = [{"text": t, "url": u} for t, u in buttons or [] if u and u.startswith(("https://", "http://"))]
+            row = [{"text": b[0], "url": b[1]} for b in buttons or []
+                   if len(b) == 2 and b[1] and b[1].startswith(("https://", "http://"))]  # link buttons only
             if row:
                 payload["reply_markup"] = {"inline_keyboard": [row]}
             r = await self.http.post_json(url, payload, log_name="telegram-bot")

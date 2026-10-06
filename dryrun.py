@@ -5,7 +5,7 @@ no keys and no network. It walks through a scripted story:
   1. DexScreener feed, X watch/sweep, Telegram messages -> alerts
   2. "15 minutes later": tweet-persistence re-checks (one official tweet stays up
      -> VERIFIED, one signal account deletes its tweet)
-  3. "later": liquidity is pulled on an alerted coin -> EXIT WARNING, paper trade closes
+  3. "later": you said you're in GoodCat, its liquidity is pulled -> EXIT WARNING, paper trade closes
   4. backtest + qualify on SYNTHETIC history (demonstrates the reports only)
 """
 from __future__ import annotations
@@ -322,7 +322,8 @@ async def run_dry(cfg: dict) -> int:
         db.x("UPDATE pending_checks SET due_at = ? WHERE kind IN ('tweet_persistence', 'dump_check')", (time.time() - 1,))
         await monitor.checks_step()
 
-        hr("STEP 3: later - liquidity pulled on GoodCat -> exit warning, paper trades react")
+        hr("STEP 3: you tap \"I bought\" on GoodCat; later its liquidity is pulled -> exit warning")
+        pipe.holdings.add("solana", "6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU")
         transport.set_liquidity("6ce9TvjRyG4XEwjEcm16AXyf2hxrXtCEsth429Uk7MwU", 20000)
         await monitor.follow_up_step()
     finally:
