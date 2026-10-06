@@ -168,7 +168,7 @@ DEFAULTS: dict[str, Any] = {
         "ntfy_server": "https://ntfy.sh",
         "exit_warnings": True,
         "exit_warnings_only_holdings": True,  # only for coins you said you're in ("I bought" / "in <CA>")
-        "holding_max_days": 14,
+        "holding_max_days": 0,          # 0 = watch a coin you're in until you say you sold
         "holdings_listener": True,
         "daily_report": True,          # one quiet learning report a day on the phone
         "daily_report_hour": 18,       # UTC

@@ -24,15 +24,16 @@ def test_commands_from_buttons_and_typing():
     assert parse_command("⚠️ EXIT WARNING GoodCat") is None                   # the bot's own messages
 
 
-def test_holdings_add_remove_and_forget_after_max_days():
+def test_holdings_add_remove_and_keep_watching_until_you_sell():
     db = DB()
     h = Holdings(db, cfg())
     assert h.add("solana", GCAT) and not h.add("solana", GCAT)
     assert h.holds("solana", GCAT)
     assert h.remove(GCAT) == 1 and not h.holds("solana", GCAT)
     assert h.add("solana", GCAT)  # bought again later
-    db.x("UPDATE holdings SET opened_at = 0")
-    assert not h.holds("solana", GCAT)  # 14+ days old: treated as forgotten
+    db.x("UPDATE holdings SET opened_at = 1")
+    assert h.holds("solana", GCAT)  # months later: still watched until you say "out"
+    assert not Holdings(db, cfg(alerts={"holding_max_days": 14})).holds("solana", GCAT)  # optional time limit
 
 
 def test_buy_alert_has_an_i_bought_button_that_posts_quietly_to_the_bot():

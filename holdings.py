@@ -53,7 +53,7 @@ def holdings_topic(topic: str) -> str:
 class Holdings:
     def __init__(self, db: DB, cfg: dict):
         self.db = db
-        self.max_days = float((cfg.get("alerts") or {}).get("holding_max_days", 14))
+        self.max_days = float((cfg.get("alerts") or {}).get("holding_max_days", 0))  # 0 = until you say "out"
 
     def add(self, chain: str, address: str) -> bool:
         """True if newly added (False if already held)."""
@@ -66,9 +66,10 @@ class Holdings:
                          (time.time(), address))
 
     def active(self) -> list:
-        """Open holdings (anything older than holding_max_days is treated as forgotten)."""
+        """Open holdings: kept until you say you sold (or, if holding_max_days is set, until that old)."""
+        cutoff = time.time() - self.max_days * 86400 if self.max_days > 0 else 0
         return self.db.q("SELECT chain, address, opened_at FROM holdings WHERE closed_at IS NULL AND opened_at >= ?",
-                         (time.time() - self.max_days * 86400,))
+                         (cutoff,))
 
     def holds(self, chain: str, address: str) -> bool:
         return any(r["chain"] == chain and r["address"] == address for r in self.active())

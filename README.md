@@ -202,7 +202,7 @@ python -m pytest                  # 206 tests
     Tell it from the ntfy app:
     - tap **✅ I bought** on an alert, and **✋ I sold** on an exit warning, or
     - type `in <contract address>` / `out <contract address>` into your ntfy topic (also `bought` / `sold`).
-    It confirms quietly, stops after 14 days if you forget, and never sees your wallet.
+    It confirms quietly, keeps watching until you say you sold, and never sees your wallet.
     Set `alerts.exit_warnings_only_holdings: false` for warnings on every alerted coin.
     The warnings fire for any of these:
     - dev selling
